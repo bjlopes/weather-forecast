@@ -30,7 +30,14 @@ function formatStamp(iso: string | null | undefined): string {
   }
 }
 
-export function RadarPanel({ className }: { className?: string }) {
+export function RadarPanel({
+  className,
+  refreshToken = 0,
+}: {
+  className?: string;
+  /** Increment to force a radar reload (e.g. pull-to-refresh). */
+  refreshToken?: number;
+}) {
   const [feed, setFeed] = useState<RadarFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
@@ -68,6 +75,11 @@ export function RadarPanel({ className }: { className?: string }) {
       window.clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    if (refreshToken <= 0) return;
+    void load();
+  }, [refreshToken]);
 
   const frames = useMemo(() => feed?.frames ?? [], [feed]);
   const playable = useMemo(

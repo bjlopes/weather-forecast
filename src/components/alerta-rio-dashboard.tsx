@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CloudRain, RefreshCw, Search, Thermometer, Wind, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForecastDaysPanel, ForecastTodayPanel } from "@/components/forecast-panel";
 import { RadarPanel } from "@/components/radar-panel";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { intensityLabel, rainIntensity } from "@/lib/alerta-rio/intensity";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
 import type { AlertaRioSnapshot, RainIntensity, RainStation, ZoneName } from "@/lib/alerta-rio/types";
@@ -161,35 +162,48 @@ export function AlertaRioDashboard() {
   const [selectedId, setSelectedId] = useState<number | null>(16);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeSegment, setActiveSegment] = useState<(typeof SEGMENTS)[number]["id"]>("hoje");
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [radarRefreshToken, setRadarRefreshToken] = useState(0);
 
-  const load = () => {
-    startTransition(async () => {
-      setError(null);
-      try {
-        const [stationsRes, forecastRes] = await Promise.all([
-          fetch("/api/alerta-rio", { cache: "no-store" }),
-          fetch("/api/previsao", { cache: "no-store" }),
-        ]);
-        if (!stationsRes.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
-        const json = (await stationsRes.json()) as AlertaRioSnapshot;
-        setData(json);
-        setSelectedId((current) => {
-          if (current && json.rainStations.some((s) => s.id === current)) return current;
-          return json.rainStations[0]?.id ?? null;
-        });
-        if (forecastRes.ok) {
-          setForecast((await forecastRes.json()) as ForecastBulletin);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro inesperado");
+  const load = useCallback(async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const [stationsRes, forecastRes] = await Promise.all([
+        fetch("/api/alerta-rio", { cache: "no-store" }),
+        fetch("/api/previsao", { cache: "no-store" }),
+      ]);
+      if (!stationsRes.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
+      const json = (await stationsRes.json()) as AlertaRioSnapshot;
+      setData(json);
+      setSelectedId((current) => {
+        if (current && json.rainStations.some((s) => s.id === current)) return current;
+        return json.rainStations[0]?.id ?? null;
+      });
+      if (forecastRes.ok) {
+        setForecast((await forecastRes.json()) as ForecastBulletin);
       }
-    });
-  };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro inesperado");
+    } finally {
+      setPending(false);
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    await load();
+    setRadarRefreshToken((n) => n + 1);
+  }, [load]);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
+
+  const { pull, refreshing, ready, indicatorHeight } = usePullToRefresh(
+    refreshAll,
+    !sheetOpen,
+  );
+  const showPull = pull > 0 || refreshing;
 
   useEffect(() => {
     if (!sheetOpen) return;
@@ -240,7 +254,34 @@ export function AlertaRioDashboard() {
   };
 
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-slate-950 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <div className="min-h-dvh overflow-x-hidden overscroll-y-contain bg-slate-950 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <div
+        className="pointer-events-none fixed inset-x-0 z-50 flex justify-center transition-[height,opacity] duration-150 ease-out"
+        style={{
+          top: "env(safe-area-inset-top)",
+          height: showPull ? indicatorHeight : 0,
+          opacity: showPull ? 1 : 0,
+        }}
+        aria-hidden={!showPull}
+      >
+        <div className="flex items-end pb-1">
+          <div
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/90 px-3 py-1.5 text-[12px] font-medium text-slate-300 shadow-lg backdrop-blur-md",
+              (refreshing || pending) && "text-brand-400",
+            )}
+          >
+            <RefreshCw
+              className={cn(
+                "size-3.5",
+                (refreshing || pending || ready) && "animate-spin",
+              )}
+            />
+            {refreshing || pending ? "Atualizando…" : ready ? "Solte para atualizar" : "Puxe para atualizar"}
+          </div>
+        </div>
+      </div>
+
       <header className="glass sticky top-0 z-40 border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
         <div className="safe-pad-x mx-auto flex w-full max-w-[min(100%,56rem)] items-center justify-between gap-3 py-2.5 sm:py-3 lg:max-w-[min(100%,72rem)]">
           <div className="min-w-0">
@@ -250,17 +291,23 @@ export function AlertaRioDashboard() {
           <Button
             variant="outline"
             size="sm"
-            onClick={load}
-            disabled={pending}
+            onClick={() => void refreshAll()}
+            disabled={pending || refreshing}
             className="touch-target hidden h-10 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 lg:inline-flex"
           >
-            <RefreshCw className={cn("size-4", pending && "animate-spin")} />
+            <RefreshCw className={cn("size-4", (pending || refreshing) && "animate-spin")} />
             Atualizar
           </Button>
         </div>
       </header>
 
-      <main className="safe-pad-x mx-auto w-full max-w-[min(100%,56rem)] space-y-4 py-4 sm:space-y-6 sm:py-5 lg:max-w-[min(100%,72rem)]">
+      <main
+        className="safe-pad-x mx-auto w-full max-w-[min(100%,56rem)] space-y-4 py-4 sm:space-y-6 sm:py-5 lg:max-w-[min(100%,72rem)]"
+        style={{
+          transform: pull > 0 ? `translateY(${Math.min(pull * 0.35, 28)}px)` : undefined,
+          transition: pull > 0 ? "none" : "transform 180ms ease-out",
+        }}
+      >
         <nav
           aria-label="Seções"
           className="sticky z-30 -mx-1 px-1 py-0.5 backdrop-blur-sm sm:py-1"
@@ -291,7 +338,7 @@ export function AlertaRioDashboard() {
 
         <ForecastTodayPanel forecast={forecast} />
         <ForecastDaysPanel forecast={forecast} />
-        <RadarPanel />
+        <RadarPanel refreshToken={radarRefreshToken} />
 
         <section id="estacoes" className="section-anchor glass rounded-xl p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -450,20 +497,24 @@ export function AlertaRioDashboard() {
       </div>
 
       {sheetOpen && selected && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={`Detalhe ${selected.name}`}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Detalhe ${selected.name}`}
+        >
           <button
             type="button"
             className="sheet-backdrop absolute inset-0 bg-black/60"
             aria-label="Fechar detalhe"
             onClick={() => setSheetOpen(false)}
           />
-          <div className="sheet-panel absolute inset-x-0 bottom-0 overflow-y-auto rounded-t-xl border-t border-slate-700/50 bg-slate-900 px-5 pt-3 shadow-xl">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="mx-auto h-1 w-10 rounded-full bg-slate-700" aria-hidden />
+          <div className="sheet-panel relative z-10 w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
+            <div className="relative mb-3">
               <button
                 type="button"
                 onClick={() => setSheetOpen(false)}
-                className="touch-target absolute top-2 right-3 inline-flex items-center justify-center rounded-lg bg-slate-800 text-slate-300"
+                className="touch-target absolute top-0 right-0 inline-flex items-center justify-center rounded-lg bg-slate-800 text-slate-300"
                 aria-label="Fechar"
               >
                 <X className="size-5" />

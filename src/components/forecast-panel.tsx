@@ -144,16 +144,20 @@ function DetailSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <button
         type="button"
         className="sheet-backdrop absolute inset-0 bg-black/60"
         aria-label="Fechar"
         onClick={onClose}
       />
-      <div className="sheet-panel absolute inset-x-0 bottom-0 max-h-[min(82dvh,40rem)] overflow-y-auto rounded-t-2xl border-t border-slate-700/50 bg-slate-900 px-5 pt-3 shadow-xl">
+      <div className="sheet-panel relative z-10 w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
         <div className="relative mb-4">
-          <div className="mx-auto h-1 w-10 rounded-full bg-slate-700" aria-hidden />
           <button
             type="button"
             onClick={onClose}
@@ -162,10 +166,10 @@ function DetailSheet({
           >
             <X className="size-5" />
           </button>
-          <h3 className="mt-4 pr-12 text-xl font-bold text-slate-100">{title}</h3>
+          <h3 className="pr-12 text-xl font-bold text-slate-100">{title}</h3>
           {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
         </div>
-        <div className="pb-2">{children}</div>
+        <div className="pb-1">{children}</div>
       </div>
     </div>
   );

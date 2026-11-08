@@ -183,9 +183,8 @@
 }
 
 .sheet-panel {
-  animation: sheet-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: sheet-pop 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
   max-height: min(78dvh, 40rem);
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
 
 @keyframes sheet-fade {
@@ -197,12 +196,14 @@
   }
 }
 
-@keyframes sheet-rise {
+@keyframes sheet-pop {
   from {
-    transform: translateY(100%);
+    opacity: 0;
+    transform: scale(0.94);
   }
   to {
-    transform: translateY(0);
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

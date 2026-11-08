@@ -12,9 +12,7 @@ export async function GET(
     return new Response("Frame inválido", { status: 400 });
   }
 
-  const url = new URL(request.url);
-  const bust = url.searchParams.get("v") ?? undefined;
-  const image = await fetchRadarFrameBytes(frame, bust);
+  const image = await fetchRadarFrameBytes(frame);
   if (!image) {
     return new Response("Imagem indisponível", { status: 404 });
   }

@@ -25,7 +25,7 @@ export type RadarFeed = {
   source: "live" | "unavailable";
 };
 
-export function radarUpstreamUrl(frame: number, _bust?: string): string {
+export function radarUpstreamUrl(frame: number): string {
   // Do not append cache-bust query params — the municipal WAF rejects them.
   const n = String(frame).padStart(3, "0");
   return `${RADAR_ORIGIN_BASE}${n}.png`;
@@ -110,10 +110,9 @@ async function nodeFetchBytes(
 
 export async function fetchRadarFrameBytes(
   frame: number,
-  bust?: string,
 ): Promise<{ bytes: Buffer; contentType: string; lastModified: string | null } | null> {
   if (!isValidRadarFrame(frame)) return null;
-  const url = radarUpstreamUrl(frame, bust);
+  const url = radarUpstreamUrl(frame);
   const viaCurl = await curlBytes(url);
   if (viaCurl) {
     return { bytes: viaCurl.bytes, contentType: "image/png", lastModified: viaCurl.lastModified };
@@ -129,7 +128,7 @@ export async function getRadarFeed(): Promise<RadarFeed> {
   const bust = String(Date.now());
   const fetchedAt = new Date().toISOString();
   const frames = Array.from({ length: RADAR_FRAME_COUNT }, (_, i) => i + 1);
-  const frameUrls = frames.map((f) => radarUpstreamUrl(f, bust));
+  const frameUrls = frames.map((f) => radarUpstreamUrl(f));
 
   const latest = await fetchRadarFrameBytes(RADAR_FRAME_COUNT);
   const lastModified = latest ? await curlLastModified(radarUpstreamUrl(RADAR_FRAME_COUNT)) : null;

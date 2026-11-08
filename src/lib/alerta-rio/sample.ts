@@ -40,7 +40,7 @@ const rainRows = [
 export const SAMPLE_SNAPSHOT: AlertaRioSnapshot = {
   fetchedAt: "2026-11-08T19:15:00.000Z",
   source: "sample",
-  sourceUrl: "http://alertario.rio.rj.gov.br/upload/TempoReal.html",
+  sourceUrl: "https://alertario.rio.rj.gov.br/upload/TempoReal.html",
   zones: [
     { zone: "Baía de Guanabara", rainStage: "Estágio 1", landslideRisk: "Baixa" },
     { zone: "Baía de Sepetiba", rainStage: "Estágio 1", landslideRisk: "Baixa" },

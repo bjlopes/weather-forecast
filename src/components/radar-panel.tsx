@@ -55,12 +55,15 @@ export function RadarPanel({ className }: { className?: string }) {
   };
 
   useEffect(() => {
-    void load();
+    const boot = window.setTimeout(() => void load(), 0);
     const id = window.setInterval(() => void load(), REFRESH_MS);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearTimeout(boot);
+      window.clearInterval(id);
+    };
   }, []);
 
-  const frames = feed?.frames ?? [];
+  const frames = useMemo(() => feed?.frames ?? [], [feed]);
   const playable = useMemo(
     () => frames.filter((f) => !broken[f]),
     [frames, broken],

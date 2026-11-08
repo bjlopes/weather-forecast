@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { CloudRain, Droplets, RefreshCw, Search, Thermometer, Wind, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ForecastPanel } from "@/components/forecast-panel";
 import { intensityLabel, rainIntensity } from "@/lib/alerta-rio/intensity";
+import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
 import type { AlertaRioSnapshot, RainIntensity, RainStation, ZoneName } from "@/lib/alerta-rio/types";
 import { cn } from "@/lib/utils";
 
@@ -127,6 +129,7 @@ function StationDetail({
 
 export function AlertaRioDashboard() {
   const [data, setData] = useState<AlertaRioSnapshot | null>(null);
+  const [forecast, setForecast] = useState<ForecastBulletin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [zone, setZone] = useState<ZoneName | "Todas">("Todas");
@@ -138,14 +141,20 @@ export function AlertaRioDashboard() {
     startTransition(async () => {
       setError(null);
       try {
-        const res = await fetch("/api/alerta-rio", { cache: "no-store" });
-        if (!res.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
-        const json = (await res.json()) as AlertaRioSnapshot;
+        const [stationsRes, forecastRes] = await Promise.all([
+          fetch("/api/alerta-rio", { cache: "no-store" }),
+          fetch("/api/previsao", { cache: "no-store" }),
+        ]);
+        if (!stationsRes.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
+        const json = (await stationsRes.json()) as AlertaRioSnapshot;
         setData(json);
         setSelectedId((current) => {
           if (current && json.rainStations.some((s) => s.id === current)) return current;
           return json.rainStations[0]?.id ?? null;
         });
+        if (forecastRes.ok) {
+          setForecast((await forecastRes.json()) as ForecastBulletin);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro inesperado");
       }
@@ -229,10 +238,16 @@ export function AlertaRioDashboard() {
           </div>
           <div className="mt-4 flex flex-wrap gap-3 sm:mt-5">
             <a
-              href="#estacoes"
+              href="#previsao"
               className="touch-target inline-flex items-center justify-center rounded-md bg-[oklch(0.32_0.07_230)] px-5 text-sm font-medium text-white transition hover:bg-[oklch(0.28_0.07_230)]"
             >
-              Ver estações
+              Ver previsão
+            </a>
+            <a
+              href="#estacoes"
+              className="touch-target inline-flex items-center justify-center rounded-md border border-[oklch(0.75_0.04_220)] bg-white/55 px-5 text-sm font-medium text-[oklch(0.3_0.05_230)] backdrop-blur transition hover:bg-white/80"
+            >
+              Estações
             </a>
             <a
               href="https://alertario.rio.rj.gov.br/"
@@ -244,6 +259,8 @@ export function AlertaRioDashboard() {
             </a>
           </div>
         </section>
+
+        <ForecastPanel forecast={forecast} />
 
         <section
           id="estacoes"

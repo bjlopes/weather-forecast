@@ -19,12 +19,18 @@ export function CitySearch({ onSelect, disabled }: CitySearchProps) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const suppressSearchRef = useRef(false);
 
   useEffect(() => {
     const q = query.trim();
+    if (suppressSearchRef.current) {
+      suppressSearchRef.current = false;
+      return;
+    }
     if (q.length < 2) {
       setResults([]);
       setError(null);
+      setOpen(false);
       return;
     }
 
@@ -76,7 +82,10 @@ export function CitySearch({ onSelect, disabled }: CitySearchProps) {
             "h-14 rounded-2xl border-white/25 bg-white/15 pr-12 pl-12 text-base text-[color:var(--ink)] shadow-[0_18px_50px_-28px_rgba(12,48,58,0.55)] backdrop-blur-md placeholder:text-[color:var(--ink-soft)]",
             "focus-visible:border-white/55 focus-visible:ring-[color:var(--accent)]/35 md:text-base"
           )}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            suppressSearchRef.current = false;
+            setQuery(e.target.value);
+          }}
           onFocus={() => {
             if (results.length > 0) setOpen(true);
           }}
@@ -101,8 +110,10 @@ export function CitySearch({ onSelect, disabled }: CitySearchProps) {
                   type="button"
                   className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[color:var(--accent-soft)] focus-visible:bg-[color:var(--accent-soft)] focus-visible:outline-none"
                   onClick={() => {
+                    suppressSearchRef.current = true;
                     onSelect(city);
                     setQuery(city.name);
+                    setResults([]);
                     setOpen(false);
                   }}
                 >

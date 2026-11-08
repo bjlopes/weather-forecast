@@ -1,10 +1,10 @@
+import { polishProse } from "./forecast-parse";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "./forecast-types";
 
 export const PREVISAO_ESTENDIDA_URL =
   "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html";
 export const PREVISAO_24H_URL =
   "https://alertario.rio.rj.gov.br/upload/Previsao.html";
-export const ICON_BASE = "https://alertario.rio.rj.gov.br/upload/icones";
 
 export interface AlertaRioDayForecast {
   date: string; // YYYY-MM-DD
@@ -18,6 +18,17 @@ export interface AlertaRioDayForecast {
   minTempC: number | null;
   maxTempC: number | null;
 }
+
+const WEEKDAY_FULL: Record<string, string> = {
+  Seg: "Segunda-feira",
+  Ter: "Terça-feira",
+  Qua: "Quarta-feira",
+  Qui: "Quinta-feira",
+  Sex: "Sexta-feira",
+  Sab: "Sábado",
+  Sáb: "Sábado",
+  Dom: "Domingo",
+};
 
 function stripTags(html: string): string {
   return html
@@ -204,34 +215,43 @@ export function dateHintToIsos(dateHint: string | null, publishedAt: string): st
   return [];
 }
 
-function aggregateDays(matches: AlertaRioDayForecast[]): {
-  minTempC: number | null;
-  maxTempC: number | null;
-  tempTrend: TempTrend | null;
-  tempTrendLabel: string | null;
-  iconFile: string | null;
-  precip: string | null;
-  wind: string | null;
-  sky: string | null;
-} {
-  const mins = matches.map((m) => m.minTempC).filter((n): n is number => n != null);
-  const maxs = matches.map((m) => m.maxTempC).filter((n): n is number => n != null);
-  const primary = matches[0];
-  return {
-    minTempC: mins.length ? Math.min(...mins) : null,
-    maxTempC: maxs.length ? Math.max(...maxs) : null,
-    tempTrend: primary?.tempTrend ?? null,
-    tempTrendLabel: primary?.tempTrendLabel ?? null,
-    iconFile: primary?.iconFile ?? null,
-    precip: primary?.precip ?? null,
-    wind: primary?.wind ?? null,
-    sky: primary?.sky ?? null,
-  };
+function weekdayFullLabel(short: string | null, iso: string): string {
+  if (short) {
+    const key = short.normalize("NFC");
+    const mapped =
+      WEEKDAY_FULL[key] ??
+      WEEKDAY_FULL[key.replace(/^Sáb$/i, "Sáb")] ??
+      Object.entries(WEEKDAY_FULL).find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1];
+    if (mapped) return mapped;
+  }
+  try {
+    const label = new Intl.DateTimeFormat("pt-BR", {
+      weekday: "long",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date(`${iso}T12:00:00-03:00`));
+    return label.replace(/^\w/, (c) => c.toLocaleUpperCase("pt-BR"));
+  } catch {
+    return short ?? iso;
+  }
+}
+
+function synthesizeSummary(d: AlertaRioDayForecast): string {
+  const sky = d.sky ? `Céu ${d.sky.toLowerCase()}` : null;
+  const precip = d.precip;
+  const wind = d.wind ? `Ventos ${d.wind.toLowerCase()}` : null;
+  return polishProse([sky, precip, wind].filter(Boolean).join(". "));
+}
+
+function compactHint(raw: string | null): string | null {
+  if (!raw) return null;
+  return polishProse(stripTags(raw).replace(/\s+/g, " "));
 }
 
 /**
- * Completa próximos dias com mín/máx/tendência/ícone oficiais do Alerta Rio
- * (Previsão 4 dias a frente).
+ * Monta próximos dias a partir da tabela oficial Previsão Estendida (4 dias)
+ * do Alerta Rio — um dia por coluna (Segunda, Terça…). Texto do boletim COR
+ * entra como resumo quando cobre exatamente aquele dia; caso contrário sintetiza
+ * a partir de céu / precipitação / vento do Alerta Rio.
  */
 export async function enrichDaysFromAlertaRio(
   bulletin: ForecastBulletin,
@@ -239,47 +259,36 @@ export async function enrichDaysFromAlertaRio(
   const extended = await fetchPrevisaoEstendida();
   if (!extended.length) return bulletin;
 
-  const byDate = new Map(extended.map((d) => [d.date, d]));
-
-  const days: ForecastDay[] = bulletin.days.map((day) => {
+  const corByDate = new Map<string, { day: ForecastDay; span: number }>();
+  for (const day of bulletin.days) {
     const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
-    const matches = keys
-      .map((k) => byDate.get(k))
-      .filter((d): d is AlertaRioDayForecast => Boolean(d));
-    if (!matches.length) return day;
+    for (const key of keys) {
+      const prev = corByDate.get(key);
+      // Prefere entrada COR de um único dia quando houver conflito
+      if (!prev || keys.length < prev.span) {
+        corByDate.set(key, { day, span: keys.length });
+      }
+    }
+  }
 
-    const agg = aggregateDays(matches);
+  const days: ForecastDay[] = extended.map((d) => {
+    const [, month, dayNum] = d.date.split("-");
+    const corHit = corByDate.get(d.date);
+    const useCorSummary = Boolean(corHit && corHit.span === 1 && corHit.day.summary);
+
     return {
-      ...day,
-      minTempC: day.minTempC ?? agg.minTempC,
-      maxTempC: day.maxTempC ?? agg.maxTempC,
-      tempTrend: day.tempTrend ?? agg.tempTrend,
-      rainHint: day.rainHint ?? (agg.precip ? stripTags(agg.precip) : null),
-      windHint: day.windHint ?? (agg.wind ? stripTags(agg.wind) : null),
-      iconUrl: agg.iconFile ? `${ICON_BASE}/${agg.iconFile}` : day.iconUrl ?? null,
-      skyHint: day.skyHint ?? agg.sky,
-    };
+      label: weekdayFullLabel(d.weekdayShort, d.date),
+      dateHint: `${Number(dayNum)}/${Number(month)}`,
+      summary: useCorSummary ? corHit!.day.summary : synthesizeSummary(d),
+      rainHint: compactHint(d.precip) ?? corHit?.day.rainHint ?? null,
+      windHint: compactHint(d.wind) ?? corHit?.day.windHint ?? null,
+      minTempC: d.minTempC,
+      maxTempC: d.maxTempC,
+      tempTrend: d.tempTrend,
+      iconUrl: null,
+      skyHint: d.sky,
+    } satisfies ForecastDay;
   });
 
-  // Se o boletim COR não listou dias, monta a partir da previsão estendida
-  const finalDays =
-    days.length > 0
-      ? days
-      : extended.map((d) => {
-          const [, month, dayNum] = d.date.split("-");
-          return {
-            label: d.weekdayShort ?? d.date,
-            dateHint: `${Number(dayNum)}/${Number(month)}`,
-            summary: [d.sky, d.precip, d.wind].filter(Boolean).join(". ") + ".",
-            rainHint: d.precip,
-            windHint: d.wind,
-            minTempC: d.minTempC,
-            maxTempC: d.maxTempC,
-            tempTrend: d.tempTrend,
-            iconUrl: d.iconFile ? `${ICON_BASE}/${d.iconFile}` : null,
-            skyHint: d.sky,
-          } satisfies ForecastDay;
-        });
-
-  return { ...bulletin, days: finalDays };
+  return { ...bulletin, days };
 }

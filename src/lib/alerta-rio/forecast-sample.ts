@@ -1,6 +1,6 @@
 import type { ForecastBulletin } from "./forecast-types";
 
-/** Snapshot from COR/Alerta Rio bulletin (08/11/2026). */
+/** Snapshot from COR/Alerta Rio bulletin (08/11/2026) + Previsão Estendida. */
 export const SAMPLE_FORECAST: ForecastBulletin = {
   fetchedAt: "2026-11-08T08:47:34.000Z",
   source: "sample",
@@ -19,42 +19,55 @@ export const SAMPLE_FORECAST: ForecastBulletin = {
   tempTrendLabel: "Acentuado declínio",
   days: [
     {
-      label: "Segunda e terça",
-      dateHint: "09–10/11",
+      label: "Segunda-feira",
+      dateHint: "9/11",
       summary:
-        "Tempo instável com nebulosidade variada e chuva fraca isolada a qualquer momento de segunda e na madrugada/manhã de terça.",
-      rainHint: "Chuva fraca isolada",
-      windHint: "Ventos fracos a moderados",
+        "Céu nublado a encoberto. Chuva fraca a moderada isolada durante a madrugada/manhã. Ventos fraco a moderado de SE/S.",
+      rainHint: "Chuva fraca a moderada isolada durante a madrugada/manhã",
+      windHint: "Fraco a Moderado de SE/S",
       minTempC: 16,
       maxTempC: 24,
       tempTrend: "declinio",
-      iconUrl: "https://alertario.rio.rj.gov.br/upload/icones/Dnub_chuva.gif",
+      iconUrl: null,
       skyHint: "Nublado a Encoberto",
+    },
+    {
+      label: "Terça-feira",
+      dateHint: "10/11",
+      summary:
+        "Céu nublado. Chuvisco/chuva fraca isolada durante a madrugada/manhã. Ventos moderado de E/SE.",
+      rainHint: "Chuvisco/Chuva Fraca isolada durante a madrugada/manhã",
+      windHint: "Moderado de E/SE",
+      minTempC: 16,
+      maxTempC: 27,
+      tempTrend: "elevacao",
+      iconUrl: null,
+      skyHint: "Nublado",
     },
     {
       label: "Quarta-feira",
       dateHint: "11/11",
       summary:
-        "Nebulosidade variada, céu nublado a parcialmente nublado e sem previsão de chuva.",
-      rainHint: "Sem chuva",
-      windHint: "Ventos moderados à tarde/noite",
+        "Céu nublado a parcialmente nublado. Chuvisco/chuva fraca isolada durante a tarde/noite. Ventos moderado de E/SE.",
+      rainHint: "Chuvisco/Chuva Fraca isolada durante a tarde/noite",
+      windHint: "Moderado de E/SE",
       minTempC: 16,
       maxTempC: 29,
       tempTrend: "estavel",
-      iconUrl: "https://alertario.rio.rj.gov.br/upload/icones/Dnub_chuva.gif",
+      iconUrl: null,
       skyHint: "Nublado a Parcialmente Nublado",
     },
     {
       label: "Quinta-feira",
       dateHint: "12/11",
       summary:
-        "Áreas de instabilidade: céu parcialmente nublado a nublado e chuva fraca a moderada isolada a partir da tarde.",
-      rainHint: "Chuva fraca a moderada isolada",
-      windHint: "Ventos fracos a moderados",
+        "Céu parcialmente nublado a nublado. Chuva fraca a moderada isolada a partir da tarde. Ventos fraco a moderado de E/SE.",
+      rainHint: "Chuva fraca a moderada isolada a partir da tarde",
+      windHint: "Fraco a Moderado de E/SE",
       minTempC: 17,
       maxTempC: 30,
       tempTrend: "estavel",
-      iconUrl: "https://alertario.rio.rj.gov.br/upload/icones/Dnub_chuva.gif",
+      iconUrl: null,
       skyHint: "Parcialmente Nublado a Nublado",
     },
   ],

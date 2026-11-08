@@ -98,11 +98,11 @@ export function RadarPanel({ className }: { className?: string }) {
   const showLive = Boolean(src) && playable.length > 0;
 
   return (
-    <section id="radar" className={cn("section-anchor glass rounded-xl p-5", className)}>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-2 border-b border-slate-700/50 pb-3">
+    <section id="radar" className={cn("section-anchor glass rounded-xl p-4 sm:p-5", className)}>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-slate-700/50 pb-3 sm:mb-4">
         <div>
           <h2 className="page-title text-slate-100">Radar Sumaré</h2>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">
             Mapa + refletividade · {formatStamp(feed?.lastModified ?? feed?.fetchedAt)}
           </p>
         </div>
@@ -120,7 +120,7 @@ export function RadarPanel({ className }: { className?: string }) {
       </div>
 
       <div className="relative isolate overflow-hidden rounded-xl border border-slate-700/50 bg-slate-950">
-        <div className="relative h-[min(62dvh,34rem)] w-full sm:h-[min(68dvh,40rem)]">
+        <div className="relative h-[min(48dvh,28rem)] w-full sm:h-[min(68dvh,40rem)]">
           <RadarMap overlayUrl={showLive ? src : null} className="absolute inset-0 z-0 h-full w-full" />
 
           {!showLive && (

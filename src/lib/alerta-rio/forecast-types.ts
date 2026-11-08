@@ -9,7 +9,7 @@ export interface ForecastDay {
   minTempC: number | null;
   maxTempC: number | null;
   tempTrend: TempTrend | null;
-  /** Ícone oficial Alerta Rio (/upload/icones/…). */
+  /** Reservado; UI usa Lucide via weatherKindFromText (sem GIFs Alerta Rio). */
   iconUrl: string | null;
   skyHint: string | null;
 }

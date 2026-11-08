@@ -27,14 +27,14 @@ function formatPublished(iso: string): string {
 function ForecastMeta({ forecast }: { forecast: ForecastBulletin }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm text-slate-400">
+      <p className="text-[13px] text-slate-400 sm:text-sm">
         Boletim COR · {formatPublished(forecast.publishedAt)}
       </p>
       <a
         href={forecast.sourceUrl}
         target="_blank"
         rel="noreferrer"
-        className="text-xs font-medium text-brand-400 hover:text-brand-300 hover:underline"
+        className="touch-target inline-flex items-center text-xs font-medium text-brand-400 hover:text-brand-300 hover:underline"
       >
         Fonte oficial
       </a>
@@ -84,13 +84,13 @@ function TempSummary({
     <div
       className={cn(
         "rounded-xl border border-slate-700/50 bg-slate-950/50",
-        compact ? "px-3 py-2.5" : "px-4 py-3",
+        compact ? "px-2.5 py-2" : "px-3.5 py-3 sm:px-4",
       )}
     >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex items-baseline gap-4 tabular-nums">
+      <div className={cn("flex flex-wrap items-end justify-between", compact ? "gap-2" : "gap-3")}>
+        <div className={cn("flex items-baseline tabular-nums", compact ? "gap-3" : "gap-4")}>
           {minTempC != null && (
-            <p className={cn("font-semibold text-slate-400", compact ? "text-xl" : "text-2xl")}>
+            <p className={cn("font-semibold text-slate-400", compact ? "text-lg" : "text-xl sm:text-2xl")}>
               {minTempC}°
               <span className="ml-1 text-[10px] font-medium tracking-wide text-slate-500 uppercase">
                 mín
@@ -98,7 +98,7 @@ function TempSummary({
             </p>
           )}
           {maxTempC != null && (
-            <p className={cn("font-bold text-brand-400", compact ? "text-2xl" : "text-4xl")}>
+            <p className={cn("font-bold text-brand-400", compact ? "text-xl" : "text-3xl sm:text-4xl")}>
               {maxTempC}°
               <span className="ml-1 text-[10px] font-medium tracking-wide text-brand-400/70 uppercase">
                 máx
@@ -112,7 +112,7 @@ function TempSummary({
         {trend && TrendIcon && (
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium",
+              "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium sm:gap-1.5 sm:px-2.5 sm:text-xs",
               trend.className,
             )}
           >
@@ -135,7 +135,7 @@ export function ForecastTodayPanel({
 }) {
   if (!forecast) {
     return (
-      <section id="hoje" className={cn("section-anchor glass rounded-xl p-5", className)} aria-busy="true">
+      <section id="hoje" className={cn("section-anchor glass rounded-xl p-4 sm:p-5", className)} aria-busy="true">
         <p className="animate-pulse text-sm text-slate-500">Carregando previsão do Alerta Rio…</p>
       </section>
     );
@@ -148,15 +148,15 @@ export function ForecastTodayPanel({
   const todayMeta = weatherMeta(todayKind);
 
   return (
-    <section id="hoje" className={cn("section-anchor glass rounded-xl p-5 sm:p-6", className)}>
+    <section id="hoje" className={cn("section-anchor glass rounded-xl p-4 sm:p-6", className)}>
       <div className="flex items-start justify-between gap-3 border-b border-slate-700/50 pb-3">
         <div className="min-w-0">
           <h2 className="page-title text-slate-100">Hoje</h2>
-          <div className="mt-1.5">
+          <div className="mt-1">
             <ForecastMeta forecast={forecast} />
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-center gap-1 rounded-xl border border-slate-700/50 bg-slate-950/50 px-3 py-2">
+        <div className="flex shrink-0 flex-col items-center gap-1 rounded-xl border border-slate-700/50 bg-slate-950/50 px-2.5 py-2 sm:px-3">
           <WeatherGlyph kind={todayKind} size="lg" />
           <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase">
             {todayMeta.label}
@@ -170,23 +170,25 @@ export function ForecastTodayPanel({
         </p>
       )}
 
-      <div className="mt-5 space-y-6">
+      <div className="mt-4 space-y-5 sm:mt-5 sm:space-y-6">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-400">Sinótica</p>
-          <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-200 sm:text-[1.05rem]">
+          <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase sm:text-xs">
+            Sinótica
+          </p>
+          <p className="mt-1.5 max-w-3xl text-[15px] leading-relaxed text-slate-200 sm:mt-2 sm:text-base sm:text-[1.05rem]">
             {synoptic}
           </p>
         </div>
 
-        <div className="border-t border-slate-700/50 pt-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="border-t border-slate-700/50 pt-4 sm:pt-5">
+          <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase sm:text-xs">
             Previsão detalhada · próximas 24 horas
           </p>
-          <h3 className="mt-2 text-xl font-semibold leading-snug text-slate-100 sm:text-2xl">
+          <h3 className="mt-1.5 text-lg font-semibold leading-snug text-slate-100 sm:mt-2 sm:text-xl sm:text-2xl">
             {title}
           </h3>
 
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <TempSummary
               minTempC={forecast.minTempC}
               maxTempC={forecast.maxTempC}
@@ -195,7 +197,7 @@ export function ForecastTodayPanel({
             />
           </div>
 
-          <p className="mt-4 max-w-3xl text-base leading-relaxed text-slate-300">
+          <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-slate-300 sm:mt-4 sm:text-base">
             {detail24h}
           </p>
         </div>
@@ -214,7 +216,7 @@ export function ForecastDaysPanel({
 }) {
   if (!forecast?.days.length) {
     return (
-      <section id="dias" className={cn("section-anchor glass rounded-xl p-5", className)}>
+      <section id="dias" className={cn("section-anchor glass rounded-xl p-4 sm:p-5", className)}>
         <h2 className="page-title text-slate-100">Próximos dias</h2>
         <p className="mt-3 text-sm text-slate-400">
           {forecast
@@ -226,19 +228,19 @@ export function ForecastDaysPanel({
   }
 
   return (
-    <section id="dias" className={cn("section-anchor glass rounded-xl p-5", className)}>
+    <section id="dias" className={cn("section-anchor glass rounded-xl p-4 sm:p-5", className)}>
       <div className="border-b border-slate-700/50 pb-3">
         <h2 className="page-title text-slate-100">Próximos dias</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          Boletim COR · previsão estendida Alerta Rio
+        <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">
+          Previsão estendida Alerta Rio · boletim COR
         </p>
       </div>
 
-      <div className="-mx-1 mt-4 overflow-x-auto px-1 pb-1">
+      <div className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:-mx-1 sm:mt-4 sm:px-1">
         <ul
-          className="grid min-w-0 gap-3"
+          className="grid gap-2.5 sm:gap-3"
           style={{
-            gridTemplateColumns: `repeat(${forecast.days.length}, minmax(11.5rem, 1fr))`,
+            gridTemplateColumns: `repeat(${forecast.days.length}, minmax(9.75rem, 1fr))`,
           }}
         >
           {forecast.days.map((day) => {
@@ -255,15 +257,15 @@ export function ForecastDaysPanel({
             return (
               <li
                 key={`${day.label}-${day.dateHint}`}
-                className="flex min-h-full flex-col rounded-xl border border-slate-700/50 bg-slate-950/40 p-4"
+                className="flex min-h-full flex-col rounded-xl border border-slate-700/50 bg-slate-950/40 p-3 sm:p-4"
               >
-                <div className="flex items-start justify-between gap-2 border-b border-slate-700/50 pb-3">
+                <div className="flex items-start justify-between gap-2 border-b border-slate-700/50 pb-2.5 sm:pb-3">
                   <div className="min-w-0">
-                    <h3 className="text-base font-semibold leading-snug text-slate-100">
+                    <h3 className="text-[15px] font-semibold leading-snug text-slate-100 sm:text-base">
                       {polishProse(day.label)}
                     </h3>
                     {day.dateHint && (
-                      <p className="mt-1 text-xs font-medium tabular-nums text-slate-500">
+                      <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-500 sm:mt-1">
                         {day.dateHint}
                       </p>
                     )}
@@ -272,24 +274,13 @@ export function ForecastDaysPanel({
                     )}
                   </div>
                   <div className="flex shrink-0 flex-col items-center gap-0.5">
-                    {day.iconUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={day.iconUrl}
-                        alt={meta.label}
-                        width={48}
-                        height={48}
-                        className="size-12 object-contain"
-                      />
-                    ) : (
-                      <WeatherGlyph kind={kind} size="md" />
-                    )}
+                    <WeatherGlyph kind={kind} size="md" />
                     <span className="max-w-[4.5rem] text-center text-[9px] leading-tight font-medium text-slate-500">
                       {meta.label}
                     </span>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-2.5 sm:mt-3">
                   <TempSummary
                     minTempC={day.minTempC}
                     maxTempC={day.maxTempC}
@@ -298,11 +289,13 @@ export function ForecastDaysPanel({
                   />
                 </div>
                 {(rainHint || windHint) && (
-                  <p className="mt-3 text-xs font-medium leading-snug text-brand-400">
+                  <p className="mt-2.5 text-[11px] font-medium leading-snug text-brand-400 sm:mt-3 sm:text-xs">
                     {[rainHint, windHint].filter(Boolean).join(" · ")}
                   </p>
                 )}
-                <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-300">{summary}</p>
+                <p className="mt-2.5 flex-1 text-[13px] leading-relaxed text-slate-300 sm:mt-3 sm:text-sm">
+                  {summary}
+                </p>
               </li>
             );
           })}

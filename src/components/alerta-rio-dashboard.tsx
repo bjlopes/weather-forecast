@@ -240,12 +240,12 @@ export function AlertaRioDashboard() {
   };
 
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-slate-950 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <div className="min-h-dvh overflow-x-hidden bg-slate-950 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
       <header className="glass sticky top-0 z-40 border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
-        <div className="safe-pad-x mx-auto flex w-full max-w-[min(100%,56rem)] items-center justify-between gap-3 py-3 lg:max-w-[min(100%,72rem)]">
+        <div className="safe-pad-x mx-auto flex w-full max-w-[min(100%,56rem)] items-center justify-between gap-3 py-2.5 sm:py-3 lg:max-w-[min(100%,72rem)]">
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-brand-500">Alerta Rio</p>
-            <p className="truncate text-xs text-slate-500">Tempo · chuva · COR</p>
+            <p className="truncate text-base font-bold text-brand-500 sm:text-lg">Alerta Rio</p>
+            <p className="truncate text-[11px] text-slate-500 sm:text-xs">Tempo · chuva · COR</p>
           </div>
           <Button
             variant="outline"
@@ -260,11 +260,11 @@ export function AlertaRioDashboard() {
         </div>
       </header>
 
-      <main className="safe-pad-x mx-auto w-full max-w-[min(100%,56rem)] space-y-6 py-5 lg:max-w-[min(100%,72rem)]">
+      <main className="safe-pad-x mx-auto w-full max-w-[min(100%,56rem)] space-y-4 py-4 sm:space-y-6 sm:py-5 lg:max-w-[min(100%,72rem)]">
         <nav
           aria-label="Seções"
-          className="sticky z-30 -mx-1 px-1 py-1 backdrop-blur-sm"
-          style={{ top: "calc(env(safe-area-inset-top) + 3.5rem)" }}
+          className="sticky z-30 -mx-1 px-1 py-0.5 backdrop-blur-sm sm:py-1"
+          style={{ top: "calc(env(safe-area-inset-top) + 3.25rem)" }}
         >
           <div
             className="inline-flex w-full rounded-lg border border-slate-700 bg-slate-800/80 p-0.5"
@@ -277,7 +277,7 @@ export function AlertaRioDashboard() {
                 role="tab"
                 aria-selected={activeSegment === seg.id}
                 className={cn(
-                  "touch-target flex flex-1 items-center justify-center rounded-md px-2 text-center text-sm font-medium transition-colors sm:px-3",
+                  "touch-target flex flex-1 items-center justify-center rounded-md px-1.5 text-center text-[13px] font-medium transition-colors sm:px-3 sm:text-sm",
                   activeSegment === seg.id
                     ? "bg-brand-500/20 text-brand-400"
                     : "text-slate-400 hover:bg-slate-700/40 hover:text-slate-200",
@@ -293,11 +293,11 @@ export function AlertaRioDashboard() {
         <ForecastDaysPanel forecast={forecast} />
         <RadarPanel />
 
-        <section id="estacoes" className="section-anchor glass rounded-xl p-5">
+        <section id="estacoes" className="section-anchor glass rounded-xl p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="page-title text-slate-100">Estações</h2>
-              <p className="mt-1 text-sm text-slate-400">Tempo Real · toque para detalhe</p>
+              <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">Tempo Real · toque para detalhe</p>
             </div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
@@ -396,8 +396,8 @@ export function AlertaRioDashboard() {
           )}
         </section>
 
-        <section className="glass rounded-xl p-5" aria-label="Situação por zona">
-          <h2 className="text-lg font-semibold text-slate-200">Situação por zona</h2>
+        <section className="glass rounded-xl p-4 sm:p-5" aria-label="Situação por zona">
+          <h2 className="text-base font-semibold text-slate-200 sm:text-lg">Situação por zona</h2>
           {data?.zones?.length ? (
             <ul className="mt-3 divide-y divide-slate-700/50">
               {data.zones.map((z) => (
@@ -428,7 +428,7 @@ export function AlertaRioDashboard() {
         </footer>
       </main>
 
-      <div className="safe-bottom-bar glass fixed inset-x-0 bottom-0 z-40 border-t border-slate-700/50 px-4 pt-2.5 lg:hidden">
+      <div className="safe-bottom-bar glass fixed inset-x-0 bottom-0 z-40 border-t border-slate-700/50 px-3 pt-2 sm:px-4 sm:pt-2.5 lg:hidden">
         <div className="mx-auto flex max-w-[min(100%,56rem)] items-center gap-2">
           <Button
             onClick={load}
@@ -442,7 +442,7 @@ export function AlertaRioDashboard() {
             href="https://alertario.rio.rj.gov.br/"
             target="_blank"
             rel="noreferrer"
-            className="touch-target inline-flex h-11 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 px-4 text-sm font-medium text-slate-300"
+            className="touch-target inline-flex h-11 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 px-3.5 text-sm font-medium text-slate-300 sm:px-4"
           >
             Oficial
           </a>

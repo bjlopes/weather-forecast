@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, Pause, Play, Radar, RefreshCw } from "lucide-react";
-import { RadarMap } from "@/components/radar-map";
 import type { RadarFeed } from "@/lib/alerta-rio/radar";
 import { cn } from "@/lib/utils";
+
+const RadarMap = dynamic(
+  () => import("@/components/radar-map").then((m) => m.RadarMap),
+  { ssr: false },
+);
 
 const FRAME_MS = 900;
 const REFRESH_MS = 120_000;

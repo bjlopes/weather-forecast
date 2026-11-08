@@ -1,0 +1,62 @@
+import type { AlertaRioSnapshot } from "./types";
+import { zoneForStation } from "./zones";
+
+const rainRows = [
+  [1, "Vidigal", "16:15", 0, 0, 0, 0, 0.6, 12.4, 64.8, 65.6],
+  [2, "Urca", "16:15", 0, 0, 0, 0, 3.4, 24.0, 88.8, 89.2],
+  [3, "Rocinha", "16:15", 0, 0, 0, 0, 1.0, 25.0, 111.0, 112.4],
+  [4, "Tijuca", "16:10", 0, 0, 0, 0, 7.8, 45.2, 82.0, 82.2],
+  [5, "Santa Teresa", "16:15", 0, 0, 0, 0.2, 5.0, 51.6, 88.8, 89.0],
+  [6, "Copacabana", "16:15", 0, 0, 0, 0, 1.0, 15.0, 75.2, 75.8],
+  [7, "Grajaú", "16:15", 0, 0, 0, 0.2, 1.6, 35.2, 95.2, 95.4],
+  [8, "Ilha do Governador", "16:15", 0, 0, 0, 0, 1.4, 8.4, 40.2, 40.6],
+  [9, "Penha", "16:15", 0, 0, 0, 0, 0.2, 5.6, 27.8, 27.8],
+  [10, "Madureira", "16:15", 0, 0, 0, 0, 3.8, 21.6, 71.8, 71.8],
+  [11, "Irajá", "16:15", 0, 0, 0, 0, 2.0, 12.0, 38.2, 38.2],
+  [12, "Bangu", "16:15", 0, 0, 0, 0, 0.4, 7.0, 48.4, 48.4],
+  [13, "Piedade", "16:15", 0, 0, 0, 0, 0.4, 11.8, 53.6, 53.6],
+  [14, "Jacarepaguá/Tanque", "16:15", 0, 0, 0, 0, 2.4, 27.8, 94.6, 94.8],
+  [15, "Saúde", "16:15", 0, 0, 0, 0, 2.2, 13.4, 46.4, 46.4],
+  [16, "Jardim Botânico", "16:15", 0, 0, 0, 0, 4.6, 38.2, 98.0, 99.4],
+  [17, "Barra/Barrinha", "16:15", 0, 0, 0, 0, 0.4, 10.8, 89.4, 91.0],
+  [18, "Jacarepaguá/Cidade de Deus", "16:15", 0, 0, 0, 0, 2.4, 21.8, 108.6, 109.0],
+  [19, "Barra/Riocentro", "16:15", 0, 0, 0, 0, 1.0, 23.2, 144.4, 146.4],
+  [20, "Guaratiba", "16:15", 0, 0, 0, 0, 0.0, 7.4, 79.2, 91.4],
+  [21, "Est. Grajaú/Jacarepaguá", "16:15", 0, 0, 0, 0, 1.4, 22.0, 93.4, 93.6],
+  [22, "Santa Cruz", "16:15", 0, 0, 0, 0, 1.2, 13.4, 64.6, 70.4],
+  [23, "Grande Méier", "16:15", 0, 0, 0, 0, 0.2, 14.0, 65.4, 65.6],
+  [24, "Anchieta", "16:15", 0, 0, 0, 0, 0.0, 7.2, 36.0, 36.2],
+  [25, "Grota Funda", "16:15", 0, 0, 0, 0, 3.0, 20.0, 122.6, 134.2],
+  [26, "Campo Grande", "16:15", 0, 0, 0, 0, 0.2, 9.8, 51.8, 59.0],
+  [27, "Sepetiba", "16:15", 0, 0, 0, 0, 0.0, 4.2, 35.0, 42.2],
+  [28, "Alto da Boa Vista", "16:15", 0, 0, 0, 0.2, 3.6, 49.0, 143.0, 145.0],
+  [29, "Av. Brasil/Mendanha", "16:15", 0, 0, 0, 0, 0.4, 9.2, 39.4, 44.2],
+  [30, "Recreio dos Bandeirantes", "16:15", 0, 0, 0, 0, 0.8, 13.4, 92.4, 97.0],
+  [31, "Laranjeiras", "16:15", 0, 0, 0, 0, 4.0, 49.0, 94.4, 94.6],
+  [32, "São Cristóvão", "16:15", 0, 0, 0, 0, 0.6, 9.2, 41.8, 41.8],
+  [33, "Tijuca/Muda", "16:15", 0, 0, 0, 0, 2.6, 31.0, 84.4, 84.8],
+] as const;
+
+export const SAMPLE_SNAPSHOT: AlertaRioSnapshot = {
+  fetchedAt: "2026-11-08T19:15:00.000Z",
+  source: "sample",
+  sourceUrl: "http://alertario.rio.rj.gov.br/upload/TempoReal.html",
+  zones: [
+    { zone: "Baía de Guanabara", rainStage: "Estágio 1", landslideRisk: "Baixa" },
+    { zone: "Baía de Sepetiba", rainStage: "Estágio 1", landslideRisk: "Baixa" },
+    { zone: "Barra/Jacarepaguá", rainStage: "Estágio 1", landslideRisk: "Baixa" },
+    { zone: "Zona Sul", rainStage: "Estágio 1", landslideRisk: "Baixa" },
+  ],
+  meteoStations: [
+    { id: 16, name: "Jardim Botânico", readAt: "16:15", temperatureC: 23, humidityPct: 72.9, pressureHpa: null, dewPointC: 17.8, windSpeedKmh: null, windDirDeg: null },
+    { id: 19, name: "Barra/Riocentro", readAt: "16:15", temperatureC: 23.4, humidityPct: 89.3, pressureHpa: null, dewPointC: 21.6, windSpeedKmh: null, windDirDeg: null },
+    { id: 20, name: "Guaratiba", readAt: "16:15", temperatureC: 22.3, humidityPct: 100, pressureHpa: 1012.4, dewPointC: 22.3, windSpeedKmh: 7.4, windDirDeg: 232.8 },
+    { id: 22, name: "Santa Cruz", readAt: "16:15", temperatureC: 23.7, humidityPct: 78.3, pressureHpa: null, dewPointC: 19.7, windSpeedKmh: null, windDirDeg: null },
+    { id: 28, name: "Alto da Boa Vista", readAt: "16:15", temperatureC: 18.1, humidityPct: 99.6, pressureHpa: null, dewPointC: 18, windSpeedKmh: null, windDirDeg: null },
+    { id: 32, name: "São Cristóvão", readAt: "16:15", temperatureC: 23.4, humidityPct: 87.3, pressureHpa: 1012.4, dewPointC: 21.1, windSpeedKmh: 0, windDirDeg: null },
+  ],
+  rainStations: rainRows.map(([id, name, readAt, m05, m10, m15, h1, h4, h24, h96, month]) => ({
+    id, name, zone: zoneForStation(id), readAt,
+    rainMm: { m05, m10, m15, m30: null, h1, h2: null, h3: null, h4, h6: null, h12: null, h24, h96, month },
+  })),
+};

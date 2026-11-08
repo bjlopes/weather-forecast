@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { CloudRain, RefreshCw, Search, Thermometer, Wind, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -304,8 +305,7 @@ export function AlertaRioDashboard() {
       <main
         className="safe-pad-x mx-auto w-full max-w-[min(100%,56rem)] space-y-4 py-4 sm:space-y-6 sm:py-5 lg:max-w-[min(100%,72rem)]"
         style={{
-          transform: pull > 0 ? `translateY(${Math.min(pull * 0.35, 28)}px)` : undefined,
-          transition: pull > 0 ? "none" : "transform 180ms ease-out",
+          paddingTop: pull > 0 ? `calc(1rem + ${Math.min(pull * 0.35, 28)}px)` : undefined,
         }}
       >
         <nav
@@ -496,34 +496,37 @@ export function AlertaRioDashboard() {
         </div>
       </div>
 
-      {sheetOpen && selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Detalhe ${selected.name}`}
-        >
-          <button
-            type="button"
-            className="sheet-backdrop absolute inset-0 bg-black/60"
-            aria-label="Fechar detalhe"
-            onClick={() => setSheetOpen(false)}
-          />
-          <div className="sheet-panel relative z-10 w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
-            <div className="relative mb-3">
-              <button
-                type="button"
-                onClick={() => setSheetOpen(false)}
-                className="touch-target absolute top-0 right-0 inline-flex items-center justify-center rounded-lg bg-slate-800 text-slate-300"
-                aria-label="Fechar"
-              >
-                <X className="size-5" />
-              </button>
+      {sheetOpen &&
+        selected &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Detalhe ${selected.name}`}
+          >
+            <button
+              type="button"
+              className="sheet-backdrop absolute inset-0 bg-black/60"
+              aria-label="Fechar detalhe"
+              onClick={() => setSheetOpen(false)}
+            />
+            <div className="sheet-panel relative z-10 my-auto max-h-[min(78dvh,40rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
+              <div className="relative mb-3 min-h-11">
+                <button
+                  type="button"
+                  onClick={() => setSheetOpen(false)}
+                  className="touch-target absolute top-0 right-0 inline-flex items-center justify-center rounded-lg bg-slate-800 text-slate-300"
+                  aria-label="Fechar"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+              <StationDetail selected={selected} meteo={meteo} selectedIntensity={selectedIntensity} compact />
             </div>
-            <StationDetail selected={selected} meteo={meteo} selectedIntensity={selectedIntensity} compact />
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

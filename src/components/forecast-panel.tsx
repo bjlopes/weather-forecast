@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, X } from "lucide-react";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "@/lib/alerta-rio/forecast-types";
 import { polishProse } from "@/lib/alerta-rio/forecast-parse";
@@ -141,11 +142,14 @@ function DetailSheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -156,7 +160,7 @@ function DetailSheet({
         aria-label="Fechar"
         onClick={onClose}
       />
-      <div className="sheet-panel relative z-10 w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
+      <div className="sheet-panel relative z-10 my-auto max-h-[min(78dvh,40rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900 px-5 py-4 shadow-xl">
         <div className="relative mb-4">
           <button
             type="button"
@@ -171,7 +175,8 @@ function DetailSheet({
         </div>
         <div className="pb-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

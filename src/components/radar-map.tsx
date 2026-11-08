@@ -15,8 +15,15 @@ const RADAR_RANGE_M = 138_900;
 /** Zoom out máximo ≈ círculo do radar + folga. */
 const VIEW_RANGE_M = RADAR_RANGE_M * 1.12;
 
+/** Approximate meter radius → lat/lng box (no map required; Circle#getBounds needs one). */
 function radarViewBounds(): L.LatLngBounds {
-  return L.circle(RADAR_SITE, { radius: VIEW_RANGE_M }).getBounds();
+  const center = L.latLng(RADAR_SITE);
+  const latDelta = VIEW_RANGE_M / 111_320;
+  const lngDelta = VIEW_RANGE_M / (111_320 * Math.cos((center.lat * Math.PI) / 180));
+  return L.latLngBounds(
+    [center.lat - latDelta, center.lng - lngDelta],
+    [center.lat + latDelta, center.lng + lngDelta],
+  );
 }
 
 function lockZoomOut(map: L.Map, fit: boolean) {

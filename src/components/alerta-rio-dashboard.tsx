@@ -5,6 +5,7 @@ import { CloudRain, Droplets, RefreshCw, Search, Thermometer, Wind, X } from "lu
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForecastPanel } from "@/components/forecast-panel";
+import { RadarPanel } from "@/components/radar-panel";
 import { intensityLabel, rainIntensity } from "@/lib/alerta-rio/intensity";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
 import type { AlertaRioSnapshot, RainIntensity, RainStation, ZoneName } from "@/lib/alerta-rio/types";
@@ -244,6 +245,12 @@ export function AlertaRioDashboard() {
               Ver previsão
             </a>
             <a
+              href="#radar"
+              className="touch-target inline-flex items-center justify-center rounded-md border border-[oklch(0.75_0.04_220)] bg-white/55 px-5 text-sm font-medium text-[oklch(0.3_0.05_230)] backdrop-blur transition hover:bg-white/80"
+            >
+              Radar
+            </a>
+            <a
               href="#estacoes"
               className="touch-target inline-flex items-center justify-center rounded-md border border-[oklch(0.75_0.04_220)] bg-white/55 px-5 text-sm font-medium text-[oklch(0.3_0.05_230)] backdrop-blur transition hover:bg-white/80"
             >
@@ -261,6 +268,7 @@ export function AlertaRioDashboard() {
         </section>
 
         <ForecastPanel forecast={forecast} />
+        <RadarPanel />
 
         <section
           id="estacoes"

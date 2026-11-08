@@ -7,6 +7,7 @@ App web com chuva e meteorologia das estações do **Sistema Alerta Rio** (Centr
 - Previsão sinótica do boletim Alerta Rio / COR na página inicial
 - Detalhe das próximas 24h (texto do boletim + faixa horária do modelo)
 - Previsão dos próximos dias publicada pelo COR
+- Live feed animado do Radar Meteorológico do Sumaré (últimas 20 imagens)
 - Lista estações pluviométricas com acumulados (15 min, 1h, 4h, 24h, 96h, mês)
 - Filtra por zona (Zona Sul, Baía de Guanabara, Barra/Jacarepaguá, Baía de Sepetiba)
 - Mostra temperatura, umidade e vento quando disponíveis

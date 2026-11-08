@@ -1,34 +1,26 @@
-# Brisa — Weather Forecast
+# Alerta Rio · Tempo e chuva
 
-A small Next.js weather app with city search, current conditions, and a five-day outlook. Data comes from [Open-Meteo](https://open-meteo.com/) (no API key).
+App web com chuva e meteorologia das estações do **Sistema Alerta Rio** (Centro de Operações Rio).
 
-## Stack
+## O que faz
 
-- Next.js (App Router) + TypeScript
-- Tailwind CSS + shadcn/ui
-- Open-Meteo Geocoding + Forecast APIs
+- Lista estações pluviométricas com acumulados (15 min, 1h, 4h, 24h, 96h, mês)
+- Filtra por zona (Zona Sul, Baía de Guanabara, Barra/Jacarepaguá, Baía de Sepetiba)
+- Mostra temperatura, umidade e vento quando disponíveis
+- Exibe estágios de chuva / risco de escorregamento quando publicados
 
-## Run locally
+Se o servidor municipal estiver inacessível, o app usa uma amostra embutida e avisa na interface.
+
+## Como rodar
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3847](http://localhost:3847).
+Abra http://127.0.0.1:3847
 
-## Scripts
+## Fonte oficial
 
-| Command         | Description                  |
-| --------------- | ---------------------------- |
-| `npm run dev`   | Dev server on port **3847**  |
-| `npm run build` | Production build             |
-| `npm run start` | Serve build on port **3847** |
-| `npm run lint`  | ESLint                       |
-
-## Features
-
-- Typeahead city search (Open-Meteo geocoding)
-- Current temperature, feels-like, humidity, and wind
-- Five-day forecast with highs/lows and rain chance
-- Sky atmosphere that shifts with weather conditions
+- https://alertario.rio.rj.gov.br/
+- https://websempre.rio.rj.gov.br/estacoes/

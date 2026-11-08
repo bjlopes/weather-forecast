@@ -1,5 +1,5 @@
-import { WeatherApp } from "@/components/weather-app";
+import { AlertaRioDashboard } from "@/components/alerta-rio-dashboard";
 
 export default function Home() {
-  return <WeatherApp />;
+  return <AlertaRioDashboard />;
 }

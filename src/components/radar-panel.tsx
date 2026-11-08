@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play, Radar, RefreshCw } from "lucide-react";
+import { RadarMap } from "@/components/radar-map";
 import type { RadarFeed } from "@/lib/alerta-rio/radar";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +43,9 @@ export function RadarPanel({ className }: { className?: string }) {
       const json = (await res.json()) as RadarFeed;
       setFeed(json);
       setIndex(Math.max(0, (json.frames?.length ?? 1) - 1));
-      // Warm cache via same-origin proxy (upstream WAF needs Referer we can only set server-side).
       for (const frame of json.frames ?? []) {
         const img = new Image();
+        img.onerror = () => setBroken((prev) => ({ ...prev, [frame]: true }));
         img.src = `/api/radar/frame/${frame}?v=${json.bust}`;
       }
     } catch (err) {
@@ -85,31 +86,19 @@ export function RadarPanel({ className }: { className?: string }) {
 
   const current = frames[index];
   const src =
-    feed?.available && current != null
+    feed?.available && current != null && !broken[current]
       ? `/api/radar/frame/${current}?v=${feed.bust}`
       : null;
-
-  const onImgError = () => {
-    if (current != null) {
-      setBroken((prev) => ({ ...prev, [current]: true }));
-    }
-  };
 
   const showLive = Boolean(src) && playable.length > 0;
 
   return (
-    <section
-      id="radar"
-      className={cn(
-        "mt-8 scroll-mt-[calc(1rem+env(safe-area-inset-top))] sm:mt-10",
-        className,
-      )}
-    >
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section id="radar" className={cn("section-anchor glass rounded-xl p-5", className)}>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2 border-b border-slate-700/50 pb-3">
         <div>
-          <h2 className="font-display text-2xl text-[oklch(0.25_0.05_230)]">Radar Sumaré</h2>
-          <p className="mt-1 text-sm text-[oklch(0.45_0.03_230)]">
-            Live feed · últimas {feed?.frameCount ?? 20} imagens · atualiza a cada ~2 min
+          <h2 className="page-title text-slate-100">Radar Sumaré</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Mapa + refletividade · {formatStamp(feed?.lastModified ?? feed?.fetchedAt)}
           </p>
         </div>
         <a
@@ -119,124 +108,99 @@ export function RadarPanel({ className }: { className?: string }) {
           }
           target="_blank"
           rel="noreferrer"
-          className="text-xs font-medium text-[oklch(0.35_0.05_230)] underline-offset-2 hover:underline"
+          className="text-xs font-medium text-brand-400 hover:text-brand-300 hover:underline"
         >
           Fonte oficial
         </a>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-white/70 bg-[oklch(0.22_0.04_230)] shadow-[0_20px_50px_-30px_oklch(0.3_0.05_230)]">
-        <div className="relative aspect-[4/3] w-full sm:aspect-[16/10]">
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.32_0.05_210)_0%,oklch(0.18_0.03_230)_70%)]"
-          />
-          <div
-            aria-hidden
-            className="absolute inset-0 opacity-[0.18]"
-            style={{
-              backgroundImage:
-                "linear-gradient(oklch(0.7_0.02_220)/20 1px, transparent 1px), linear-gradient(90deg, oklch(0.7_0.02_220)/20 1px, transparent 1px)",
-              backgroundSize: "48px 48px",
-            }}
-          />
+      <div className="relative isolate overflow-hidden rounded-xl border border-slate-700/50 bg-slate-950">
+        <div className="relative h-[min(62dvh,34rem)] w-full sm:h-[min(68dvh,40rem)]">
+          <RadarMap overlayUrl={showLive ? src : null} className="absolute inset-0 z-0 h-full w-full" />
 
-          {showLive && src ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={src}
-              src={src}
-              alt={`Radar Sumaré, quadro ${current} de ${frames.length}`}
-              className="absolute inset-0 h-full w-full object-contain"
-              draggable={false}
-              onError={onImgError}
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-              <Radar className="size-8 text-white/50" />
-              <p className="text-sm text-white/75">
-                {loading
-                  ? "Carregando imagens do radar…"
-                  : error ||
-                    "Radar indisponível no momento (manutenção ou bloqueio da fonte)."}
+          {!showLive && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-slate-950/70 px-6 text-center">
+              <Radar className="size-8 text-slate-500" />
+              <p className="text-sm text-slate-400">
+                {loading ? "Carregando radar…" : error || "Radar indisponível no momento."}
               </p>
             </div>
           )}
 
-          <div className="absolute top-3 left-3 flex items-center gap-2 rounded-md bg-black/45 px-2.5 py-1.5 text-[11px] font-medium tracking-wide text-white/90 backdrop-blur-sm">
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                showLive ? "animate-pulse bg-emerald-400" : "bg-white/40",
-              )}
-            />
-            {showLive ? "AO VIVO" : "OFFLINE"}
-          </div>
-
-          {showLive && (
-            <div className="absolute top-3 right-3 rounded-md bg-black/45 px-2.5 py-1.5 text-[11px] tabular-nums text-white/85 backdrop-blur-sm">
-              {index + 1}/{frames.length}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
+            <div className="inline-flex items-center gap-2 rounded-lg bg-brand-500/20 px-2.5 py-1.5 text-[11px] font-bold tracking-wide text-brand-400 backdrop-blur-sm">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full bg-brand-400",
+                  showLive && "animate-pulse",
+                )}
+              />
+              {showLive ? "AO VIVO" : "OFFLINE"}
             </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/25 px-3 py-3 sm:px-4">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label="Quadro anterior"
-              disabled={!showLive}
-              onClick={() =>
-                setIndex((i) => (frames.length ? (i - 1 + frames.length) % frames.length : 0))
-              }
-              className="touch-target inline-flex size-10 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 disabled:opacity-40"
-            >
-              <ChevronLeft className="size-5" />
-            </button>
-            <button
-              type="button"
-              aria-label={playing ? "Pausar animação" : "Reproduzir animação"}
-              disabled={!showLive}
-              onClick={() => setPlaying((p) => !p)}
-              className="touch-target inline-flex size-10 items-center justify-center rounded-md bg-white/15 text-white transition hover:bg-white/25 disabled:opacity-40"
-            >
-              {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
-            </button>
-            <button
-              type="button"
-              aria-label="Próximo quadro"
-              disabled={!showLive}
-              onClick={() => setIndex((i) => (frames.length ? (i + 1) % frames.length : 0))}
-              className="touch-target inline-flex size-10 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 disabled:opacity-40"
-            >
-              <ChevronRight className="size-5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Atualizar radar"
-              onClick={() => void load()}
-              className="touch-target inline-flex size-10 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10"
-            >
-              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            </button>
+            {showLive && (
+              <div className="rounded-lg bg-slate-900/70 px-2.5 py-1.5 text-[11px] font-semibold tabular-nums text-slate-300 backdrop-blur-md">
+                {index + 1}/{frames.length}
+              </div>
+            )}
           </div>
 
-          <p className="text-[11px] text-white/65 sm:text-xs">
-            Última leitura {formatStamp(feed?.lastModified ?? feed?.fetchedAt)}
-          </p>
+          <div className="absolute inset-x-0 bottom-0 z-20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-900/70 px-2 py-2 backdrop-blur-md">
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  aria-label="Quadro anterior"
+                  disabled={!showLive}
+                  onClick={() =>
+                    setIndex((i) => (frames.length ? (i - 1 + frames.length) % frames.length : 0))
+                  }
+                  className="touch-target inline-flex size-10 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800/50 disabled:opacity-40"
+                >
+                  <ChevronLeft className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={playing ? "Pausar animação" : "Reproduzir animação"}
+                  disabled={!showLive}
+                  onClick={() => setPlaying((p) => !p)}
+                  className="touch-target inline-flex size-10 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400 transition hover:bg-brand-500/30 disabled:opacity-40"
+                >
+                  {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Próximo quadro"
+                  disabled={!showLive}
+                  onClick={() => setIndex((i) => (frames.length ? (i + 1) % frames.length : 0))}
+                  className="touch-target inline-flex size-10 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800/50 disabled:opacity-40"
+                >
+                  <ChevronRight className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Atualizar radar"
+                  onClick={() => void load()}
+                  className="touch-target inline-flex size-10 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-800/50"
+                >
+                  <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+                </button>
+              </div>
+              <p className="pr-2 text-[11px] text-slate-500">Arraste · zoom</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[oklch(0.45_0.03_230)]">
-        <span className="font-medium tracking-wide uppercase">dBZ</span>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-400">
+        <span className="font-bold tracking-wide uppercase">dBZ</span>
         {[
-          { c: "bg-[oklch(0.75_0.12_145)]", t: "20 fraca" },
-          { c: "bg-[oklch(0.78_0.14_95)]", t: "35 mod." },
-          { c: "bg-[oklch(0.72_0.16_55)]", t: "45 forte" },
-          { c: "bg-[oklch(0.58_0.2_25)]", t: "50+ muito forte" },
+          { c: "bg-brand-500", t: "20 fraca" },
+          { c: "bg-amber-400", t: "35 mod." },
+          { c: "bg-orange-500", t: "45 forte" },
+          { c: "bg-red-500", t: "50+ muito forte" },
         ].map((item) => (
           <span key={item.t} className="inline-flex items-center gap-1.5">
-            <span className={cn("size-2.5 rounded-sm", item.c)} />
+            <span className={cn("size-2 rounded-sm", item.c)} />
             {item.t}
           </span>
         ))}

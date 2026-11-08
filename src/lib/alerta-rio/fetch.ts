@@ -4,7 +4,6 @@ import type { AlertaRioSnapshot } from "./types";
 
 const CANDIDATE_URLS = [
   "https://alertario.rio.rj.gov.br/upload/TempoReal.html",
-  "https://websempre.rio.rj.gov.br/estacoes/",
 ];
 
 async function tryFetch(url: string): Promise<string | null> {

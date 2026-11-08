@@ -1,4 +1,4 @@
-import type { HourlyForecast } from "./hourly-fetch";
+export type TempTrend = "declinio" | "estavel" | "elevacao";
 
 export interface ForecastDay {
   label: string;
@@ -6,6 +6,12 @@ export interface ForecastDay {
   summary: string;
   rainHint: string | null;
   windHint: string | null;
+  minTempC: number | null;
+  maxTempC: number | null;
+  tempTrend: TempTrend | null;
+  /** Ícone oficial Alerta Rio (/upload/icones/…). */
+  iconUrl: string | null;
+  skyHint: string | null;
 }
 
 export interface ForecastBulletin {
@@ -20,7 +26,9 @@ export interface ForecastBulletin {
   detail24h: string;
   minTempC: number | null;
   maxTempC: number | null;
+  /** Tendência das temperaturas no boletim (declínio / estável / elevação). */
+  tempTrend: TempTrend | null;
+  /** Frase curta para UI, ex.: "Acentuado declínio". */
+  tempTrendLabel: string | null;
   days: ForecastDay[];
-  /** Previsão horária (modelo) para as próximas 24h no município. */
-  hourly?: HourlyForecast;
 }

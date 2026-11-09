@@ -294,9 +294,10 @@ function DayCard({
 }) {
   const summary = polishProse(day.summary);
   const rainHint = day.rainHint ? polishProse(day.rainHint) : null;
-  const kind = weatherKindFromText(rainHint, day.skyHint, summary, day.windHint);
+  const skyHint = day.skyHint ? polishProse(day.skyHint) : null;
+  const kind = weatherKindFromText(rainHint, skyHint, summary, day.windHint);
   const meta = weatherMeta(kind);
-  const tip = shortPrecip(rainHint) ?? day.skyHint ?? meta.label;
+  const tip = shortPrecip(rainHint) ?? skyHint ?? meta.label;
 
   return (
     <li className="min-w-0">
@@ -344,6 +345,7 @@ function DayDetail({
 }) {
   const meta = weatherMeta(kind);
   const summary = polishProse(day.summary);
+  const skyHint = day.skyHint ? polishProse(day.skyHint) : null;
   const rainHint = day.rainHint ? polishProse(day.rainHint) : null;
   const windHint = day.windHint ? polishProse(day.windHint) : null;
 
@@ -353,7 +355,7 @@ function DayDetail({
         <WeatherGlyph kind={kind} size="lg" />
         <div className="min-w-0">
           <p className="font-semibold text-slate-100">{meta.label}</p>
-          {day.skyHint && <p className="mt-0.5 text-sm text-slate-400">{day.skyHint}</p>}
+          {skyHint && <p className="mt-0.5 text-sm text-slate-400">{skyHint}</p>}
         </div>
       </div>
 
@@ -364,12 +366,15 @@ function DayDetail({
       />
 
       {(rainHint || windHint) && (
-        <p className="mt-4 text-sm font-medium text-brand-400">
-          {[rainHint, windHint].filter(Boolean).join(" · ")}
-        </p>
+        <div className="mt-4 space-y-1.5 text-sm font-medium text-brand-400">
+          {rainHint && <p>{rainHint}</p>}
+          {windHint && <p>{windHint}</p>}
+        </div>
       )}
 
-      <p className="mt-4 text-[15px] leading-relaxed text-slate-300">{summary}</p>
+      {summary && summary !== rainHint && (
+        <p className="mt-4 text-[15px] leading-relaxed text-slate-300">{summary}</p>
+      )}
     </>
   );
 }

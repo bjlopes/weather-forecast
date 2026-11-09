@@ -203,6 +203,17 @@ export function AlertaRioDashboard() {
     return () => window.clearTimeout(id);
   }, [load]);
 
+  // Abre sempre no topo (ignora #radar/#dias salvos e restauração de scroll).
+  useEffect(() => {
+    if ("scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+    if (window.location.hash) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+    window.scrollTo(0, 0);
+  }, []);
+
   const { pull, refreshing, ready, indicatorHeight } = usePullToRefresh(
     refreshAll,
     !sheetOpen,

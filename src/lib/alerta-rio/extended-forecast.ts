@@ -48,6 +48,36 @@ function parseTrend(raw: string): { trend: TempTrend | null; label: string | nul
   return { trend: null, label: null };
 }
 
+/** Prefere declínio/elevação se aparecer em algum período; senão o primeiro válido. */
+function pickTrend(values: string[]): { trend: TempTrend | null; label: string | null } {
+  const parsed = values.map(parseTrend).filter((t) => t.trend);
+  const strong = parsed.find((t) => t.trend === "declinio" || t.trend === "elevacao");
+  return strong ?? parsed[0] ?? { trend: null, label: null };
+}
+
+/** Um valor representativo (manhã se houver), sem juntar todos os períodos. */
+function pickPeriodValue(values: string[], preferIndex = 1): string | null {
+  const clean = values.map((v) => v.trim()).filter(Boolean);
+  if (!clean.length) return null;
+  return clean[Math.min(preferIndex, clean.length - 1)] ?? clean[0] ?? null;
+}
+
+/** Precipitação curta e estável para cards (sem "durante… / a partir…"). */
+function shortPrecipHint(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const base = polishProse(raw)
+    .split(/\s+(?:durante|a partir|entre|no período|pela|pela manhã|à tarde|até)\b/i)[0]
+    .trim()
+    .replace(/[.,;:\s]+$/, "");
+  return base || null;
+}
+
+function shortSkyHint(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const first = raw.split(/\s*·\s*/)[0]?.trim() ?? raw;
+  return polishProse(first).replace(/\.$/, "") || null;
+}
+
 function parseMaxMin(raw: string): { min: number | null; max: number | null } {
   const max =
     raw.match(/m[aá]x\.?\s*:?\s*(\d{1,2})\s*°?\s*C/i)?.[1] ??
@@ -226,27 +256,19 @@ export function parsePrevisao24hHtml(html: string): AlertaRioDayForecast | null 
     if (Number.isFinite(min)) minTempC = minTempC == null ? min : Math.min(minTempC, min);
   }
 
-  const uniqJoin = (vals: string[]) => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const v of vals) {
-      const key = v.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(v);
-    }
-    return out.length ? out.join(" · ") : null;
-  };
-
-  const trendInfo = parseTrend((byLabel.get("trend") ?? [])[0] ?? "");
+  const skyVals = byLabel.get("sky") ?? [];
+  const precipVals = byLabel.get("precip") ?? [];
+  const windVals = byLabel.get("wind") ?? [];
+  const trendInfo = pickTrend(byLabel.get("trend") ?? []);
 
   return {
     date: iso,
     weekdayShort: weekday,
     iconFile: null,
-    sky: uniqJoin(byLabel.get("sky") ?? []),
-    precip: uniqJoin(byLabel.get("precip") ?? []),
-    wind: uniqJoin(byLabel.get("wind") ?? []),
+    // Manhã (índice 1) espelha o "dia" melhor que juntar madrugada+tarde+noite.
+    sky: pickPeriodValue(skyVals, 1),
+    precip: pickPeriodValue(precipVals, 1),
+    wind: pickPeriodValue(windVals, 1),
     tempTrend: trendInfo.trend,
     tempTrendLabel: trendInfo.label,
     minTempC,
@@ -321,15 +343,21 @@ function weekdayFullLabel(short: string | null, iso: string): string {
 }
 
 function synthesizeSummary(d: AlertaRioDayForecast): string {
-  const sky = d.sky ? `Céu ${d.sky.toLowerCase()}` : null;
-  const precip = d.precip;
-  const wind = d.wind ? `Ventos ${d.wind.toLowerCase()}` : null;
-  return polishProse([sky, precip, wind].filter(Boolean).join(". "));
+  const sky = shortSkyHint(d.sky);
+  const precip = shortPrecipHint(d.precip) ?? compactHint(d.precip);
+  const windRaw = compactHint(d.wind);
+  const wind = windRaw ? `Ventos ${windRaw.toLowerCase()}` : null;
+  const parts = [
+    sky ? `Céu ${sky.toLowerCase()}` : null,
+    precip,
+    wind,
+  ].filter(Boolean);
+  return polishProse(parts.join(". "));
 }
 
-function compactHint(raw: string | null): string | null {
+function compactHint(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return polishProse(stripTags(raw).replace(/\s+/g, " "));
+  return polishProse(stripTags(raw).replace(/\s+/g, " ")) || null;
 }
 
 function toForecastDay(
@@ -338,19 +366,36 @@ function toForecastDay(
 ): ForecastDay {
   const [, month, dayNum] = d.date.split("-");
   const corHit = corByDate.get(d.date);
-  const useCorSummary = Boolean(corHit && corHit.span === 1 && corHit.day.summary);
+
+  // Sempre prioriza campos estruturados do Alerta Rio (tamanho/conteúdo estáveis).
+  // COR só entra como fallback quando a tabela não trouxe o dado.
+  const skyHint = shortSkyHint(d.sky) ?? shortSkyHint(corHit?.day.skyHint) ?? null;
+  const rainHint =
+    shortPrecipHint(d.precip) ??
+    shortPrecipHint(corHit?.day.rainHint) ??
+    compactHint(d.precip) ??
+    compactHint(corHit?.day.rainHint);
+  const windHint = compactHint(d.wind) ?? compactHint(corHit?.day.windHint);
+  const summary =
+    synthesizeSummary({
+      ...d,
+      sky: skyHint,
+      precip: rainHint,
+      wind: windHint,
+    }) ||
+    (corHit?.day.summary ? polishProse(corHit.day.summary) : "");
 
   return {
     label: weekdayFullLabel(d.weekdayShort, d.date),
     dateHint: `${Number(dayNum)}/${Number(month)}`,
-    summary: useCorSummary ? corHit!.day.summary : synthesizeSummary(d),
-    rainHint: compactHint(d.precip) ?? corHit?.day.rainHint ?? null,
-    windHint: compactHint(d.wind) ?? corHit?.day.windHint ?? null,
-    minTempC: d.minTempC,
-    maxTempC: d.maxTempC,
-    tempTrend: d.tempTrend,
+    summary,
+    rainHint,
+    windHint,
+    minTempC: d.minTempC ?? corHit?.day.minTempC ?? null,
+    maxTempC: d.maxTempC ?? corHit?.day.maxTempC ?? null,
+    tempTrend: d.tempTrend ?? corHit?.day.tempTrend ?? null,
     iconUrl: null,
-    skyHint: d.sky,
+    skyHint,
   };
 }
 

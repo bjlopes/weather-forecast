@@ -2,10 +2,6 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-
-const emptySubscribe = () => () => {};
-const getClientSnapshot = () => true;
-const getServerSnapshot = () => false;
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, X } from "lucide-react";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "@/lib/alerta-rio/forecast-types";
 import { polishProse } from "@/lib/alerta-rio/forecast-parse";
@@ -16,6 +12,10 @@ import {
   type WeatherKind,
 } from "@/lib/alerta-rio/weather-icon";
 import { cn } from "@/lib/utils";
+
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 function formatPublished(iso: string): string {
   try {
@@ -59,35 +59,33 @@ const TREND_UI: Record<
 function shortPrecip(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const base = polishProse(raw)
-    .split(/\s+(?:durante|a partir|entre|no período|pela|pela manhã|à tarde)\b/i)[0]
+    .split(/\s+(?:durante|a partir|entre|no período|pela|pela manhã|à tarde|a qualquer)\b/i)[0]
     .trim()
     .replace(/[.,;:\s]+$/, "");
   return base || null;
 }
 
-/** Temperaturas compactas que cabem em cards estreitos. */
+/** Temperaturas + tendência — tendência sempre em linha própria nos cards. */
 function TempChip({
   minTempC,
   maxTempC,
   tempTrend,
   className,
+  stacked = false,
 }: {
   minTempC: number | null;
   maxTempC: number | null;
   tempTrend?: TempTrend | null;
   className?: string;
+  /** Nos cards estreitos, tendência fica abaixo das temps. */
+  stacked?: boolean;
 }) {
   if (minTempC == null && maxTempC == null && !tempTrend) return null;
   const trend = tempTrend ? TREND_UI[tempTrend] : null;
   const TrendIcon = trend?.Icon;
 
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 tabular-nums",
-        className,
-      )}
-    >
+  const temps = (
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 tabular-nums">
       {minTempC != null && (
         <span className="text-sm font-semibold text-slate-400">
           {minTempC}°
@@ -104,18 +102,31 @@ function TempChip({
           </span>
         </span>
       )}
-      {trend && TrendIcon && (
-        <span
-          className={cn(
-            "inline-flex items-center gap-0.5 text-[11px] font-medium",
-            trend.className,
-          )}
-          title={trend.label}
-        >
-          <TrendIcon className="size-3.5 shrink-0" />
-          <span className="truncate">{trend.label}</span>
-        </span>
+    </div>
+  );
+
+  const trendEl =
+    trend && TrendIcon ? (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-[12px] font-semibold whitespace-nowrap",
+          trend.className,
+        )}
+      >
+        <TrendIcon className="size-3.5 shrink-0" />
+        {trend.label}
+      </span>
+    ) : null;
+
+  return (
+    <div
+      className={cn(
+        stacked ? "flex flex-col items-start gap-1" : "flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1",
+        className,
       )}
+    >
+      {temps}
+      {trendEl}
     </div>
   );
 }
@@ -298,9 +309,13 @@ function DayCard({
   const kind = weatherKindFromText(rainHint, skyHint, summary, day.windHint);
   const meta = weatherMeta(kind);
   const tip = shortPrecip(rainHint) ?? skyHint ?? meta.label;
+  // "Segunda-feira" → "Segunda" para caber sem reticências
+  const shortLabel = polishProse(day.label)
+    .replace(/-feira$/i, "")
+    .trim();
 
   return (
-    <li className="min-w-0">
+    <li className="min-w-0 snap-start">
       <button
         type="button"
         onClick={onOpen}
@@ -308,8 +323,8 @@ function DayCard({
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="whitespace-nowrap text-[15px] leading-snug font-semibold text-slate-100">
-              {polishProse(day.label)}
+            <h3 className="text-[15px] leading-snug font-semibold text-slate-100">
+              {shortLabel}
             </h3>
             {day.dateHint && (
               <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-500">
@@ -322,6 +337,7 @@ function DayCard({
 
         <TempChip
           className="mt-3"
+          stacked
           minTempC={day.minTempC}
           maxTempC={day.maxTempC}
           tempTrend={day.tempTrend}
@@ -344,15 +360,10 @@ function DayDetail({
   kind: WeatherKind;
 }) {
   const meta = weatherMeta(kind);
-  const summary = polishProse(day.summary);
   const skyHint = day.skyHint ? polishProse(day.skyHint) : null;
   const rainHint = day.rainHint ? polishProse(day.rainHint) : null;
   const windHint = day.windHint ? polishProse(day.windHint) : null;
   const corDetail = day.corDetail ? polishProse(day.corDetail) : null;
-  const showStructuredSummary =
-    Boolean(summary) &&
-    summary !== rainHint &&
-    (!corDetail || summary !== corDetail);
 
   return (
     <>
@@ -365,21 +376,30 @@ function DayDetail({
       </div>
 
       <TempChip
+        stacked
         minTempC={day.minTempC}
         maxTempC={day.maxTempC}
         tempTrend={day.tempTrend}
       />
 
-      {(rainHint || windHint) && (
-        <div className="mt-4 space-y-1.5 text-sm font-medium text-brand-400">
-          {rainHint && <p>{rainHint}</p>}
-          {windHint && <p>{windHint}</p>}
-        </div>
-      )}
-
-      {showStructuredSummary && (
-        <p className="mt-4 text-[15px] leading-relaxed text-slate-300">{summary}</p>
-      )}
+      <div className="mt-5 space-y-3">
+        {rainHint && (
+          <div>
+            <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+              Chuva
+            </p>
+            <p className="mt-1 text-[15px] leading-snug text-slate-200">{rainHint}</p>
+          </div>
+        )}
+        {windHint && (
+          <div>
+            <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+              Vento
+            </p>
+            <p className="mt-1 text-[15px] leading-snug text-slate-200">{windHint}</p>
+          </div>
+        )}
+      </div>
 
       {corDetail && (
         <div className="mt-5 border-t border-slate-700/50 pt-5">
@@ -428,14 +448,16 @@ export function ForecastDaysPanel({
       <section id="dias" className={cn("section-anchor glass overflow-hidden rounded-xl p-4", className)}>
         <div className="border-b border-slate-700/50 pb-3">
           <h2 className="page-title text-slate-100">Próximos dias</h2>
-          <p className="mt-1 text-[13px] text-slate-400">Toque no dia para ver o detalhe</p>
+          <p className="mt-1 text-[13px] text-slate-400">
+            Deslize para ver todos · toque para detalhe
+          </p>
         </div>
 
         <div className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain px-4 pb-1">
           <ul
-            className="grid gap-2.5"
+            className="grid snap-x snap-mandatory gap-2.5"
             style={{
-              gridTemplateColumns: `repeat(${forecast.days.length}, minmax(11.75rem, 1fr))`,
+              gridTemplateColumns: `repeat(${forecast.days.length}, minmax(9.5rem, 1fr))`,
             }}
           >
             {forecast.days.map((day) => (

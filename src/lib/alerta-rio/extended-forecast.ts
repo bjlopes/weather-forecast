@@ -112,15 +112,21 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   if (rows.length < 3) return [];
 
-  // Cabeçalho com datas fica no 2º <tr> do thead (após o título)
+  // Cabeçalho com datas (th ou td) — após o título
   const headerRow =
-    rows.find((r) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(r) && /<th\b/i.test(r)) ?? "";
-  const dateThs = [...headerRow.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)]
+    rows.find(
+      (r) =>
+        /\d{1,2}\/\d{1,2}\/\d{4}/.test(r) &&
+        (/<th\b/i.test(r) || /Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom/i.test(r)),
+    ) ?? "";
+  const dateCells = [
+    ...headerRow.matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi),
+  ]
     .map((m) => m[1])
-    .slice(1); // ignora primeira th vazia
+    .slice(1); // ignora primeira célula vazia/rótulo
 
-  const dates = dateThs.map((th) => {
-    const text = stripTags(th);
+  const dates = dateCells.map((cell) => {
+    const text = stripTags(cell);
     const iso = brDateToIso(text);
     const weekday = text.match(/\b(Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom)\b/i)?.[1] ?? null;
     return { iso, weekday };
@@ -160,7 +166,13 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
     if (label.startsWith("céu") || label.startsWith("ceu")) byLabel.set("sky", values);
     else if (label.startsWith("precip")) byLabel.set("precip", values);
     else if (label.startsWith("vento")) byLabel.set("wind", values);
-    else if (label.includes("temperatura")) byLabel.set("trend", values);
+    else if (
+      /tend[eê]ncia/.test(label) ||
+      (/temperatura/.test(label) &&
+        values.some((v) => /decl|eleva|est[aá]ve/i.test(v)))
+    ) {
+      byLabel.set("trend", values);
+    }
   }
 
   const sky = byLabel.get("sky") ?? [];
@@ -191,20 +203,23 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
 }
 
 async function fetchAlertaHtml(url: string, referer: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        Accept: "text/html",
-        Referer: referer,
-        "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
-      },
-    });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
+  const headers = {
+    Accept: "text/html,application/xhtml+xml",
+    Referer: referer,
+    "User-Agent":
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, { cache: "no-store", headers });
+      if (!res.ok) continue;
+      const html = await res.text();
+      if (html && /<tr\b/i.test(html)) return html;
+    } catch {
+      // tenta de novo
+    }
   }
+  return null;
 }
 
 export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {

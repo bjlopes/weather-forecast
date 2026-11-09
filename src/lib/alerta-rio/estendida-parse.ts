@@ -63,29 +63,25 @@ function cellHtmls(rowHtml: string): string[] {
   return [...rowHtml.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1]);
 }
 
-/** Parse da tabela oficial PrevisaoEstendida.html do Alerta Rio. */
+/**
+ * Parse da tabela oficial PrevisaoEstendida.html do Alerta Rio.
+ * O HTML oficial às vezes omite o </tr> do cabeçalho de datas (fecha só no </thead>),
+ * então as datas são extraídas por padrão — não pela contagem bruta de células.
+ */
 export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[] {
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   if (rows.length < 3) return [];
 
-  const headerRow =
-    rows.find(
-      (r) =>
-        /\d{1,2}\/\d{1,2}\/\d{4}/.test(r) &&
-        (/<th\b/i.test(r) || /Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom/i.test(r)),
-    ) ?? "";
-  const dateCells = [
-    ...headerRow.matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi),
-  ]
-    .map((m) => m[1])
-    .slice(1);
-
-  const dates = dateCells.map((cell) => {
-    const text = stripTags(cell);
-    const iso = brDateToIso(text);
-    const weekday = text.match(/\b(Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom)\b/i)?.[1] ?? null;
-    return { iso, weekday };
-  });
+  // Datas: th/td com dd/mm/yyyy (ignora título e linhas de conteúdo misturadas).
+  const dateHits = [
+    ...html.matchAll(
+      /<t[hd]\b[^>]*>\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:<br\s*\/?>|\s)+([A-Za-zÁáÉéÍíÓóÚúÂâÊêÔôÃãÕõÇç]{3})/gi,
+    ),
+  ];
+  const dates = dateHits.map((m) => ({
+    iso: brDateToIso(m[1]),
+    weekday: m[2] ?? null,
+  })).filter((d): d is { iso: string; weekday: string | null } => Boolean(d.iso));
 
   const n = dates.length;
   if (!n) return [];
@@ -141,12 +137,10 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
   const trends = byLabel.get("trend") ?? [];
   const temps = byLabel.get("temps") ?? [];
 
-  const out: AlertaRioDayForecast[] = [];
-  dates.forEach((d, i) => {
-    if (!d.iso) return;
+  return dates.map((d, i) => {
     const trendInfo = parseTrend(trends[i] ?? "");
     const mm = parseMaxMin(temps[i] ?? "");
-    out.push({
+    return {
       date: d.iso,
       weekdayShort: d.weekday,
       iconFile: iconFiles[i],
@@ -157,7 +151,6 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
       tempTrendLabel: trendInfo.label,
       minTempC: mm.min,
       maxTempC: mm.max,
-    });
+    };
   });
-  return out;
 }

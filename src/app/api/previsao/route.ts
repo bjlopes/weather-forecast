@@ -1,5 +1,6 @@
 import { getForecastBulletin } from "@/lib/alerta-rio/forecast-fetch";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function GET() {

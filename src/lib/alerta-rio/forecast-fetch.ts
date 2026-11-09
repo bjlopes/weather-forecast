@@ -1,4 +1,4 @@
-import { enrichDaysFromAlertaRio } from "./extended-forecast";
+import { enrichDaysFromAlertaRio } from "./enrich-days";
 import {
   parseForecastHtml,
   isForecastPost,

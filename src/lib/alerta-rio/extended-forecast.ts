@@ -160,21 +160,106 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
   return out;
 }
 
-export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
+async function fetchAlertaHtml(url: string, referer: string): Promise<string | null> {
   try {
-    const res = await fetch(PREVISAO_ESTENDIDA_URL, {
+    const res = await fetch(url, {
       cache: "no-store",
       headers: {
         Accept: "text/html",
-        Referer: "https://alertario.rio.rj.gov.br/4-dias/",
+        Referer: referer,
         "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
       },
     });
-    if (!res.ok) return [];
-    return parsePrevisaoEstendidaHtml(await res.text());
+    if (!res.ok) return null;
+    return await res.text();
   } catch {
-    return [];
+    return null;
   }
+}
+
+export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
+  const html = await fetchAlertaHtml(
+    PREVISAO_ESTENDIDA_URL,
+    "https://alertario.rio.rj.gov.br/4-dias/",
+  );
+  return html ? parsePrevisaoEstendidaHtml(html) : [];
+}
+
+/**
+ * Boletim de 24h (Previsao.html) — um dia (em geral o próximo) em períodos.
+ * Usado quando a Estendida já começa no dia seguinte e pula a Segunda/hoje.
+ */
+export function parsePrevisao24hHtml(html: string): AlertaRioDayForecast | null {
+  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
+  if (!rows.length) return null;
+
+  const headerRow =
+    rows.find((r) => /madrugada|manh[ãa]|tarde|noite/i.test(r) && /\d{1,2}\/\d{1,2}\/\d{4}/.test(r)) ??
+    "";
+  const headerText = stripTags(headerRow);
+  const iso = brDateToIso(headerText.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)?.[1] ?? "");
+  if (!iso) return null;
+
+  const weekday = headerText.match(/\b(Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom)\b/i)?.[1] ?? null;
+  const byLabel = new Map<string, string[]>();
+
+  for (const row of rows) {
+    const texts = cellTexts(row);
+    if (texts.length < 2) continue;
+    const label = texts[0].toLowerCase();
+    const values = texts.slice(1).filter(Boolean);
+    if (!values.length) continue;
+    if (label.startsWith("céu") || label.startsWith("ceu")) byLabel.set("sky", values);
+    else if (label.startsWith("precip")) byLabel.set("precip", values);
+    else if (label.startsWith("vento")) byLabel.set("wind", values);
+    else if (label.includes("tend") || label.includes("temperatura")) byLabel.set("trend", values);
+  }
+
+  // Temps por zona: "Máx.: 24 °C Mín.: 16 °C"
+  const zoneTemps = [...html.matchAll(/m[aá]x\.?\s*:?\s*(\d{1,2})\s*°?\s*C[^\d]{0,20}m[ií]n\.?\s*:?\s*(\d{1,2})\s*°?\s*C/gi)];
+  let maxTempC: number | null = null;
+  let minTempC: number | null = null;
+  for (const m of zoneTemps) {
+    const max = Number(m[1]);
+    const min = Number(m[2]);
+    if (Number.isFinite(max)) maxTempC = maxTempC == null ? max : Math.max(maxTempC, max);
+    if (Number.isFinite(min)) minTempC = minTempC == null ? min : Math.min(minTempC, min);
+  }
+
+  const uniqJoin = (vals: string[]) => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const v of vals) {
+      const key = v.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+    }
+    return out.length ? out.join(" · ") : null;
+  };
+
+  const trendInfo = parseTrend((byLabel.get("trend") ?? [])[0] ?? "");
+
+  return {
+    date: iso,
+    weekdayShort: weekday,
+    iconFile: null,
+    sky: uniqJoin(byLabel.get("sky") ?? []),
+    precip: uniqJoin(byLabel.get("precip") ?? []),
+    wind: uniqJoin(byLabel.get("wind") ?? []),
+    tempTrend: trendInfo.trend,
+    tempTrendLabel: trendInfo.label,
+    minTempC,
+    maxTempC,
+  };
+}
+
+export async function fetchPrevisao24h(): Promise<AlertaRioDayForecast | null> {
+  const html = await fetchAlertaHtml(
+    PREVISAO_24H_URL,
+    "https://alertario.rio.rj.gov.br/",
+  );
+  return html ? parsePrevisao24hHtml(html) : null;
 }
 
 function ymd(year: number, month: number, day: number): string {
@@ -247,17 +332,50 @@ function compactHint(raw: string | null): string | null {
   return polishProse(stripTags(raw).replace(/\s+/g, " "));
 }
 
+function toForecastDay(
+  d: AlertaRioDayForecast,
+  corByDate: Map<string, { day: ForecastDay; span: number }>,
+): ForecastDay {
+  const [, month, dayNum] = d.date.split("-");
+  const corHit = corByDate.get(d.date);
+  const useCorSummary = Boolean(corHit && corHit.span === 1 && corHit.day.summary);
+
+  return {
+    label: weekdayFullLabel(d.weekdayShort, d.date),
+    dateHint: `${Number(dayNum)}/${Number(month)}`,
+    summary: useCorSummary ? corHit!.day.summary : synthesizeSummary(d),
+    rainHint: compactHint(d.precip) ?? corHit?.day.rainHint ?? null,
+    windHint: compactHint(d.wind) ?? corHit?.day.windHint ?? null,
+    minTempC: d.minTempC,
+    maxTempC: d.maxTempC,
+    tempTrend: d.tempTrend,
+    iconUrl: null,
+    skyHint: d.sky,
+  };
+}
+
+function rioTodayYmd(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 /**
- * Monta próximos dias a partir da tabela oficial Previsão Estendida (4 dias)
- * do Alerta Rio — um dia por coluna (Segunda, Terça…). Texto do boletim COR
- * entra como resumo quando cobre exatamente aquele dia; caso contrário sintetiza
- * a partir de céu / precipitação / vento do Alerta Rio.
+ * Monta próximos dias a partir da Previsão Estendida (4 dias).
+ * Se a Estendida pular o próximo dia (ex.: Segunda só no Previsao.html),
+ * esse dia é prefixado para não sumir da lista.
  */
 export async function enrichDaysFromAlertaRio(
   bulletin: ForecastBulletin,
 ): Promise<ForecastBulletin> {
-  const extended = await fetchPrevisaoEstendida();
-  if (!extended.length) return bulletin;
+  const [extended, day24h] = await Promise.all([
+    fetchPrevisaoEstendida(),
+    fetchPrevisao24h(),
+  ]);
+  if (!extended.length && !day24h) return bulletin;
 
   const corByDate = new Map<string, { day: ForecastDay; span: number }>();
   for (const day of bulletin.days) {
@@ -271,24 +389,38 @@ export async function enrichDaysFromAlertaRio(
     }
   }
 
-  const days: ForecastDay[] = extended.map((d) => {
-    const [, month, dayNum] = d.date.split("-");
-    const corHit = corByDate.get(d.date);
-    const useCorSummary = Boolean(corHit && corHit.span === 1 && corHit.day.summary);
+  const byDate = new Map<string, AlertaRioDayForecast>();
+  for (const d of extended) byDate.set(d.date, d);
 
-    return {
-      label: weekdayFullLabel(d.weekdayShort, d.date),
-      dateHint: `${Number(dayNum)}/${Number(month)}`,
-      summary: useCorSummary ? corHit!.day.summary : synthesizeSummary(d),
-      rainHint: compactHint(d.precip) ?? corHit?.day.rainHint ?? null,
-      windHint: compactHint(d.wind) ?? corHit?.day.windHint ?? null,
-      minTempC: d.minTempC,
-      maxTempC: d.maxTempC,
-      tempTrend: d.tempTrend,
-      iconUrl: null,
-      skyHint: d.sky,
-    } satisfies ForecastDay;
-  });
+  // Previsao.html cobre um dia que a Estendida às vezes já não lista.
+  if (day24h && !byDate.has(day24h.date)) {
+    byDate.set(day24h.date, day24h);
+  }
+
+  // Datas COR anteriores ao 1º dia da Estendida (ex.: Segunda em "9 e 10/11").
+  const today = rioTodayYmd();
+  const firstExtended = extended[0]?.date ?? null;
+  for (const [iso, hit] of corByDate) {
+    if (byDate.has(iso)) continue;
+    if (iso < today) continue;
+    if (firstExtended && iso > firstExtended) continue;
+    byDate.set(iso, {
+      date: iso,
+      weekdayShort: null,
+      iconFile: null,
+      sky: hit.day.skyHint,
+      precip: hit.day.rainHint,
+      wind: hit.day.windHint,
+      tempTrend: hit.day.tempTrend,
+      tempTrendLabel: null,
+      minTempC: hit.day.minTempC,
+      maxTempC: hit.day.maxTempC,
+    });
+  }
+
+  const days = [...byDate.keys()]
+    .sort()
+    .map((iso) => toForecastDay(byDate.get(iso)!, corByDate));
 
   return { ...bulletin, days };
 }

@@ -1,5 +1,12 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { polishProse } from "./forecast-parse";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "./forecast-types";
+
+const execFileAsync = promisify(execFile);
 
 export const PREVISAO_ESTENDIDA_URL =
   "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html";
@@ -142,12 +149,18 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
     const texts = cellTexts(row);
     if (!texts.length) continue;
 
-    // Linha só de máx/mín (rowspan da temperatura) — todas as células são valores
-    if (
+    // Linha só de máx/mín (às vezes com 1ª célula vazia por rowspan)
+    const tempValues =
       texts.length === n &&
       texts.every((t) => /m[aá]x\.?\s*:|m[ií]n\.?\s*:/i.test(t))
-    ) {
-      byLabel.set("temps", texts);
+        ? texts
+        : texts.length === n + 1 &&
+            !texts[0] &&
+            texts.slice(1).every((t) => /m[aá]x\.?\s*:|m[ií]n\.?\s*:/i.test(t))
+          ? texts.slice(1)
+          : null;
+    if (tempValues) {
+      byLabel.set("temps", tempValues);
       continue;
     }
 
@@ -202,24 +215,76 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
   return out;
 }
 
-async function fetchAlertaHtml(url: string, referer: string): Promise<string | null> {
-  const headers = {
-    Accept: "text/html,application/xhtml+xml",
-    Referer: referer,
-    "User-Agent":
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-  };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(url, { cache: "no-store", headers });
-      if (!res.ok) continue;
-      const html = await res.text();
-      if (html && /<tr\b/i.test(html)) return html;
-    } catch {
-      // tenta de novo
-    }
+async function curlAlertaHtml(url: string, referer: string): Promise<string | null> {
+  const dir = await mkdtemp(join(tmpdir(), "alerta-html-"));
+  const bodyPath = join(dir, "body.html");
+  try {
+    const { stdout: code } = await execFileAsync(
+      "/usr/bin/curl",
+      [
+        "-sS",
+        "-L",
+        "--max-time",
+        "15",
+        "-A",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "-H",
+        "Accept: text/html,application/xhtml+xml",
+        "-H",
+        `Referer: ${referer}`,
+        "-o",
+        bodyPath,
+        "-w",
+        "%{http_code}",
+        url,
+      ],
+      { timeout: 20_000, encoding: "utf8" },
+    );
+    if (String(code).trim() !== "200") return null;
+    const html = await readFile(bodyPath, "utf8");
+    if (html && /<tr\b/i.test(html) && html.length > 400) return html;
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
-  return null;
+}
+
+async function nodeFetchAlertaHtml(
+  url: string,
+  referer: string,
+): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        Referer: referer,
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    if (html && /<tr\b/i.test(html) && html.length > 400) return html;
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Prefer curl on Vercel — Alertario frequentemente bloqueia fetch do Node. */
+async function fetchAlertaHtml(url: string, referer: string): Promise<string | null> {
+  const viaCurl = await curlAlertaHtml(url, referer);
+  if (viaCurl) return viaCurl;
+  return nodeFetchAlertaHtml(url, referer);
 }
 
 export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
@@ -317,6 +382,14 @@ export function dateHintToIsos(dateHint: string | null, publishedAt: string): st
   if (!dateHint) return [];
   const year = rioYear(publishedAt);
   const hint = dateHint.replace(/–/g, "-").replace(/\s+/g, " ").trim();
+
+  // "12/11 e 13/11" ou "12/11-13/11"
+  const multiFull = [
+    ...hint.matchAll(/(\d{1,2})\/(\d{1,2})/g),
+  ].map((m) => ymd(year, Number(m[2]), Number(m[1])));
+  if (multiFull.length > 1 && /\be\b|-/.test(hint)) {
+    return [...new Set(multiFull)];
+  }
 
   const andMatch = hint.match(/^(\d{1,2})\s*e\s*(\d{1,2})\/(\d{1,2})$/i);
   if (andMatch) {
@@ -459,11 +532,26 @@ export async function enrichDaysFromAlertaRio(
     return { ...bulletin, days };
   }
 
-  // Fallback sem Estendida: dias futuros do COR / amostra.
-  const days = bulletin.days.filter((day) => {
+  // Fallback sem Estendida: expande ranges do COR ("12/11 e 13/11") em dias futuros.
+  const days: ForecastDay[] = [];
+  const seen = new Set<string>();
+  for (const day of bulletin.days) {
     const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
-    if (!keys.length) return true;
-    return keys.every((iso) => iso > today);
-  });
-  return { ...bulletin, days };
+    const future = keys.length ? keys.filter((iso) => iso > today) : [];
+    if (!future.length) {
+      if (!keys.length) days.push(day);
+      continue;
+    }
+    for (const iso of future) {
+      if (seen.has(iso)) continue;
+      seen.add(iso);
+      const [, month, dayNum] = iso.split("-");
+      days.push({
+        ...day,
+        label: weekdayFullLabel(null, iso),
+        dateHint: `${Number(dayNum)}/${Number(month)}`,
+      });
+    }
+  }
+  return { ...bulletin, days: days.slice(0, 4) };
 }

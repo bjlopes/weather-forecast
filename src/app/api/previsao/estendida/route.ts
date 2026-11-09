@@ -1,16 +1,17 @@
+import {
+  parsePrevisaoEstendidaHtml,
+  PREVISAO_ESTENDIDA_URL,
+} from "@/lib/alerta-rio/estendida-parse";
+
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-const URL = "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html";
-
 /**
- * Proxy Edge da Previsão Estendida.
- * No Node serverless da Vercel o WAF do Alertario rejeita o HTML;
- * na Edge o fetch passa.
+ * Busca + parse da Estendida na Edge (WAF libera) e devolve dias estruturados.
  */
 export async function GET() {
   try {
-    const res = await fetch(URL, {
+    const res = await fetch(PREVISAO_ESTENDIDA_URL, {
       cache: "no-store",
       redirect: "follow",
       headers: {
@@ -32,8 +33,9 @@ export async function GET() {
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
     }
+    const days = parsePrevisaoEstendidaHtml(html);
     return Response.json(
-      { ok: true, html },
+      { ok: true, count: days.length, days },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {

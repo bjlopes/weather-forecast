@@ -5,26 +5,19 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { polishProse } from "./forecast-parse";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "./forecast-types";
+import {
+  type AlertaRioDayForecast,
+  parsePrevisaoEstendidaHtml,
+  PREVISAO_ESTENDIDA_URL,
+} from "./estendida-parse";
+
+export type { AlertaRioDayForecast } from "./estendida-parse";
+export { parsePrevisaoEstendidaHtml, PREVISAO_ESTENDIDA_URL } from "./estendida-parse";
 
 const execFileAsync = promisify(execFile);
 
-export const PREVISAO_ESTENDIDA_URL =
-  "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html";
 export const PREVISAO_24H_URL =
   "https://alertario.rio.rj.gov.br/upload/Previsao.html";
-
-export interface AlertaRioDayForecast {
-  date: string; // YYYY-MM-DD
-  weekdayShort: string | null;
-  iconFile: string | null;
-  sky: string | null;
-  precip: string | null;
-  wind: string | null;
-  tempTrend: TempTrend | null;
-  tempTrendLabel: string | null;
-  minTempC: number | null;
-  maxTempC: number | null;
-}
 
 const WEEKDAY_FULL: Record<string, string> = {
   Seg: "Segunda-feira",
@@ -112,107 +105,6 @@ function cellTexts(rowHtml: string): string[] {
 
 function cellHtmls(rowHtml: string): string[] {
   return [...rowHtml.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1]);
-}
-
-/** Parse da tabela oficial PrevisaoEstendida.html do Alerta Rio. */
-export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[] {
-  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
-  if (rows.length < 3) return [];
-
-  // Cabeçalho com datas (th ou td) — após o título
-  const headerRow =
-    rows.find(
-      (r) =>
-        /\d{1,2}\/\d{1,2}\/\d{4}/.test(r) &&
-        (/<th\b/i.test(r) || /Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom/i.test(r)),
-    ) ?? "";
-  const dateCells = [
-    ...headerRow.matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi),
-  ]
-    .map((m) => m[1])
-    .slice(1); // ignora primeira célula vazia/rótulo
-
-  const dates = dateCells.map((cell) => {
-    const text = stripTags(cell);
-    const iso = brDateToIso(text);
-    const weekday = text.match(/\b(Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom)\b/i)?.[1] ?? null;
-    return { iso, weekday };
-  });
-
-  const n = dates.length;
-  if (!n) return [];
-
-  const byLabel = new Map<string, string[]>();
-  const iconFiles: Array<string | null> = Array(n).fill(null);
-
-  for (const row of rows) {
-    const texts = cellTexts(row);
-    if (!texts.length) continue;
-
-    // Linha só de máx/mín (às vezes com 1ª célula vazia por rowspan)
-    const tempValues =
-      texts.length === n &&
-      texts.every((t) => /m[aá]x\.?\s*:|m[ií]n\.?\s*:/i.test(t))
-        ? texts
-        : texts.length === n + 1 &&
-            !texts[0] &&
-            texts.slice(1).every((t) => /m[aá]x\.?\s*:|m[ií]n\.?\s*:/i.test(t))
-          ? texts.slice(1)
-          : null;
-    if (tempValues) {
-      byLabel.set("temps", tempValues);
-      continue;
-    }
-
-    if (texts.length < 2) continue;
-    const label = texts[0].toLowerCase();
-    const values = texts.slice(1, 1 + n);
-
-    if (label.includes("condi") || label.includes("tempo")) {
-      const htmls = cellHtmls(row).slice(1, 1 + n);
-      htmls.forEach((cell, i) => {
-        const file = cell.match(/icones\/([^"'>\s]+)/i)?.[1] ?? null;
-        iconFiles[i] = file;
-      });
-      continue;
-    }
-    if (label.startsWith("céu") || label.startsWith("ceu")) byLabel.set("sky", values);
-    else if (label.startsWith("precip")) byLabel.set("precip", values);
-    else if (label.startsWith("vento")) byLabel.set("wind", values);
-    else if (
-      /tend[eê]ncia/.test(label) ||
-      (/temperatura/.test(label) &&
-        values.some((v) => /decl|eleva|est[aá]ve/i.test(v)))
-    ) {
-      byLabel.set("trend", values);
-    }
-  }
-
-  const sky = byLabel.get("sky") ?? [];
-  const precip = byLabel.get("precip") ?? [];
-  const wind = byLabel.get("wind") ?? [];
-  const trends = byLabel.get("trend") ?? [];
-  const temps = byLabel.get("temps") ?? [];
-
-  const out: AlertaRioDayForecast[] = [];
-  dates.forEach((d, i) => {
-    if (!d.iso) return;
-    const trendInfo = parseTrend(trends[i] ?? "");
-    const mm = parseMaxMin(temps[i] ?? "");
-    out.push({
-      date: d.iso,
-      weekdayShort: d.weekday,
-      iconFile: iconFiles[i],
-      sky: sky[i] ?? null,
-      precip: precip[i] ?? null,
-      wind: wind[i] ?? null,
-      tempTrend: trendInfo.trend,
-      tempTrendLabel: trendInfo.label,
-      minTempC: mm.min,
-      maxTempC: mm.max,
-    });
-  });
-  return out;
 }
 
 function isUsableAlertaHtml(html: string | null | undefined): html is string {
@@ -310,25 +202,32 @@ async function fetchAlertaHtml(url: string, referer: string): Promise<string | n
   return curlAlertaHtml(url, referer);
 }
 
-async function fetchEstendidaHtmlViaEdgeProxy(): Promise<string | null> {
-  const host = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || null;
-  if (!host) return null;
-  try {
-    const res = await fetch(`${host}/api/previsao/estendida`, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { ok?: boolean; html?: string };
-    if (json.ok && typeof json.html === "string" && isUsableAlertaHtml(json.html)) {
-      return json.html;
+async function fetchEstendidaViaEdgeProxy(): Promise<AlertaRioDayForecast[]> {
+  const hosts = [
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || null,
+    "https://weather-forecast-chi-rosy.vercel.app",
+  ].filter((h): h is string => Boolean(h));
+
+  for (const host of hosts) {
+    try {
+      const res = await fetch(`${host}/api/previsao/estendida`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as {
+        ok?: boolean;
+        days?: AlertaRioDayForecast[];
+      };
+      if (json.ok && Array.isArray(json.days) && json.days.length) {
+        return json.days;
+      }
+    } catch {
+      // tenta próximo host
     }
-    return null;
-  } catch {
-    return null;
   }
+  return [];
 }
 
 export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
@@ -343,13 +242,8 @@ export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> 
     if (parsed.length) return parsed;
   }
 
-  // Vercel Node costuma levar WAF "Request Rejected"; Edge ainda acessa.
-  const viaEdge = await fetchEstendidaHtmlViaEdgeProxy();
-  if (viaEdge) {
-    const parsed = parsePrevisaoEstendidaHtml(viaEdge);
-    if (parsed.length) return parsed;
-  }
-  return [];
+  // Vercel Node leva WAF "Request Rejected"; Edge libera e já devolve dias parseados.
+  return fetchEstendidaViaEdgeProxy();
 }
 
 /**

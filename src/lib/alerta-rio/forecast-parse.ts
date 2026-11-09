@@ -178,6 +178,7 @@ function parseNextDays(block: string): ForecastDay[] {
       tempTrend: trend.trend,
       iconUrl: null,
       skyHint: null,
+      corDetail: summary || null,
     };
   });
 }

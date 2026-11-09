@@ -30,6 +30,8 @@ export const SAMPLE_FORECAST: ForecastBulletin = {
       tempTrend: "declinio",
       iconUrl: null,
       skyHint: "Nublado a Encoberto",
+      corDetail:
+        "Na segunda-feira (9/11), o tempo permanece instável. A previsão é de céu encoberto passando a nublado e chuva fraca a moderada isolada até o período da manhã.",
     },
     {
       label: "Terça-feira",
@@ -43,6 +45,7 @@ export const SAMPLE_FORECAST: ForecastBulletin = {
       tempTrend: "elevacao",
       iconUrl: null,
       skyHint: "Nublado",
+      corDetail: null,
     },
     {
       label: "Quarta-feira",
@@ -56,6 +59,7 @@ export const SAMPLE_FORECAST: ForecastBulletin = {
       tempTrend: "estavel",
       iconUrl: null,
       skyHint: "Nublado a Parcialmente Nublado",
+      corDetail: null,
     },
     {
       label: "Quinta-feira",
@@ -69,6 +73,7 @@ export const SAMPLE_FORECAST: ForecastBulletin = {
       tempTrend: "estavel",
       iconUrl: null,
       skyHint: "Parcialmente Nublado a Nublado",
+      corDetail: null,
     },
   ],
 };

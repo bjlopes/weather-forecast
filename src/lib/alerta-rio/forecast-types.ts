@@ -12,6 +12,8 @@ export interface ForecastDay {
   /** Reservado; UI usa Lucide via weatherKindFromText (sem GIFs Alerta Rio). */
   iconUrl: string | null;
   skyHint: string | null;
+  /** Texto completo do boletim COR para este dia, se houver. */
+  corDetail: string | null;
 }
 
 export interface ForecastBulletin {

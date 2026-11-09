@@ -385,6 +385,12 @@ function toForecastDay(
     }) ||
     (corHit?.day.summary ? polishProse(corHit.day.summary) : "");
 
+  const corRaw =
+    corHit?.day.corDetail ||
+    corHit?.day.summary ||
+    null;
+  const corDetail = corRaw ? polishProse(corRaw) : null;
+
   return {
     label: weekdayFullLabel(d.weekdayShort, d.date),
     dateHint: `${Number(dayNum)}/${Number(month)}`,
@@ -396,6 +402,7 @@ function toForecastDay(
     tempTrend: d.tempTrend ?? corHit?.day.tempTrend ?? null,
     iconUrl: null,
     skyHint,
+    corDetail,
   };
 }
 
@@ -420,7 +427,16 @@ export async function enrichDaysFromAlertaRio(
     fetchPrevisaoEstendida(),
     fetchPrevisao24h(),
   ]);
-  if (!extended.length && !day24h) return bulletin;
+  const today = rioTodayYmd();
+  if (!extended.length && !day24h) {
+    // Sem tabelas Alerta Rio: ainda remove o dia atual do COR.
+    const days = bulletin.days.filter((day) => {
+      const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
+      if (!keys.length) return true;
+      return keys.some((iso) => iso > today);
+    });
+    return { ...bulletin, days };
+  }
 
   const corByDate = new Map<string, { day: ForecastDay; span: number }>();
   for (const day of bulletin.days) {
@@ -437,17 +453,16 @@ export async function enrichDaysFromAlertaRio(
   const byDate = new Map<string, AlertaRioDayForecast>();
   for (const d of extended) byDate.set(d.date, d);
 
-  // Previsao.html cobre um dia que a Estendida às vezes já não lista.
-  if (day24h && !byDate.has(day24h.date)) {
+  // Previsao.html só entra se for dia futuro (hoje fica só em "Hoje").
+  if (day24h && day24h.date > today && !byDate.has(day24h.date)) {
     byDate.set(day24h.date, day24h);
   }
 
-  // Datas COR anteriores ao 1º dia da Estendida (ex.: Segunda em "9 e 10/11").
-  const today = rioTodayYmd();
+  // Datas COR futuras anteriores ao 1º dia da Estendida.
   const firstExtended = extended[0]?.date ?? null;
   for (const [iso, hit] of corByDate) {
     if (byDate.has(iso)) continue;
-    if (iso < today) continue;
+    if (iso <= today) continue;
     if (firstExtended && iso > firstExtended) continue;
     byDate.set(iso, {
       date: iso,
@@ -465,6 +480,7 @@ export async function enrichDaysFromAlertaRio(
 
   const days = [...byDate.keys()]
     .sort()
+    .filter((iso) => iso > today)
     .map((iso) => toForecastDay(byDate.get(iso)!, corByDate));
 
   return { ...bulletin, days };

@@ -348,6 +348,11 @@ function DayDetail({
   const skyHint = day.skyHint ? polishProse(day.skyHint) : null;
   const rainHint = day.rainHint ? polishProse(day.rainHint) : null;
   const windHint = day.windHint ? polishProse(day.windHint) : null;
+  const corDetail = day.corDetail ? polishProse(day.corDetail) : null;
+  const showStructuredSummary =
+    Boolean(summary) &&
+    summary !== rainHint &&
+    (!corDetail || summary !== corDetail);
 
   return (
     <>
@@ -372,8 +377,17 @@ function DayDetail({
         </div>
       )}
 
-      {summary && summary !== rainHint && (
+      {showStructuredSummary && (
         <p className="mt-4 text-[15px] leading-relaxed text-slate-300">{summary}</p>
+      )}
+
+      {corDetail && (
+        <div className="mt-5 border-t border-slate-700/50 pt-5">
+          <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">
+            Boletim COR
+          </p>
+          <p className="mt-2 text-[15px] leading-relaxed text-slate-300">{corDetail}</p>
+        </div>
       )}
     </>
   );

@@ -33,4 +33,6 @@ export interface ForecastBulletin {
   /** Frase curta para UI, ex.: "Acentuado declínio". */
   tempTrendLabel: string | null;
   days: ForecastDay[];
+  /** Origem dos cards de próximos dias (debug / UI). */
+  daysSource?: "estendida" | "cor" | "sample";
 }

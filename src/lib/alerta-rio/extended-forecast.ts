@@ -215,36 +215,53 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
   return out;
 }
 
+function isUsableAlertaHtml(html: string | null | undefined): html is string {
+  if (!html) return false;
+  if (html.includes("Request Rejected")) return false;
+  if (html.length < 400) return false;
+  return /<tr\b/i.test(html);
+}
+
 async function curlAlertaHtml(url: string, referer: string): Promise<string | null> {
   const dir = await mkdtemp(join(tmpdir(), "alerta-html-"));
   const bodyPath = join(dir, "body.html");
+  const agents = [
+    "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  ];
   try {
-    const { stdout: code } = await execFileAsync(
-      "/usr/bin/curl",
-      [
-        "-sS",
-        "-L",
-        "--max-time",
-        "15",
-        "-A",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "-H",
-        "Accept: text/html,application/xhtml+xml",
-        "-H",
-        `Referer: ${referer}`,
-        "-o",
-        bodyPath,
-        "-w",
-        "%{http_code}",
-        url,
-      ],
-      { timeout: 20_000, encoding: "utf8" },
-    );
-    if (String(code).trim() !== "200") return null;
-    const html = await readFile(bodyPath, "utf8");
-    if (html && /<tr\b/i.test(html) && html.length > 400) return html;
-    return null;
-  } catch {
+    for (const agent of agents) {
+      try {
+        const { stdout: code } = await execFileAsync(
+          "/usr/bin/curl",
+          [
+            "-sS",
+            "-L",
+            "--max-time",
+            "18",
+            "-A",
+            agent,
+            "-H",
+            "Accept: text/html,application/xhtml+xml",
+            "-H",
+            "Accept-Language: pt-BR,pt;q=0.9",
+            "-H",
+            `Referer: ${referer}`,
+            "-o",
+            bodyPath,
+            "-w",
+            "%{http_code}",
+            url,
+          ],
+          { timeout: 22_000, encoding: "utf8" },
+        );
+        if (String(code).trim() !== "200") continue;
+        const html = await readFile(bodyPath, "utf8");
+        if (isUsableAlertaHtml(html)) return html;
+      } catch {
+        // próximo agent
+      }
+    }
     return null;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
@@ -255,44 +272,57 @@ async function nodeFetchAlertaHtml(
   url: string,
   referer: string,
 ): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: "no-store",
-      redirect: "follow",
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        Referer: referer,
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    if (html && /<tr\b/i.test(html) && html.length > 400) return html;
-    return null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+  const agents = [
+    "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  ];
+  for (const agent of agents) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        cache: "no-store",
+        redirect: "follow",
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "pt-BR,pt;q=0.9",
+          Referer: referer,
+          "User-Agent": agent,
+        },
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      if (isUsableAlertaHtml(html)) return html;
+    } catch {
+      // próximo agent
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
 }
 
-/** Prefer curl on Vercel — Alertario frequentemente bloqueia fetch do Node. */
+/** Node fetch first (works for TempoReal on Vercel); curl as backup. */
 async function fetchAlertaHtml(url: string, referer: string): Promise<string | null> {
-  const viaCurl = await curlAlertaHtml(url, referer);
-  if (viaCurl) return viaCurl;
-  return nodeFetchAlertaHtml(url, referer);
+  const viaNode = await nodeFetchAlertaHtml(url, referer);
+  if (viaNode) return viaNode;
+  return curlAlertaHtml(url, referer);
 }
 
 export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
-  const html = await fetchAlertaHtml(
+  const candidates = [
     PREVISAO_ESTENDIDA_URL,
-    "https://alertario.rio.rj.gov.br/4-dias/",
-  );
-  return html ? parsePrevisaoEstendidaHtml(html) : [];
+    `${PREVISAO_ESTENDIDA_URL}?t=${Date.now()}`,
+    "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.htm",
+  ];
+  for (const url of candidates) {
+    const html = await fetchAlertaHtml(url, "https://alertario.rio.rj.gov.br/4-dias/");
+    if (!html) continue;
+    const parsed = parsePrevisaoEstendidaHtml(html);
+    if (parsed.length) return parsed;
+  }
+  return [];
 }
 
 /**
@@ -529,7 +559,7 @@ export async function enrichDaysFromAlertaRio(
     const days = extended
       .filter((d) => d.date > today)
       .map((d) => toForecastDay(d, corByDate));
-    return { ...bulletin, days };
+    return { ...bulletin, days, daysSource: "estendida" };
   }
 
   // Fallback sem Estendida: expande ranges do COR ("12/11 e 13/11") em dias futuros.
@@ -553,5 +583,9 @@ export async function enrichDaysFromAlertaRio(
       });
     }
   }
-  return { ...bulletin, days: days.slice(0, 4) };
+  return {
+    ...bulletin,
+    days: days.slice(0, 4),
+    daysSource: bulletin.source === "sample" ? "sample" : "cor",
+  };
 }

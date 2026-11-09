@@ -78,10 +78,12 @@ export function parsePrevisaoEstendidaHtml(html: string): AlertaRioDayForecast[]
       /<t[hd]\b[^>]*>\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:<br\s*\/?>|\s)+([A-Za-zÁáÉéÍíÓóÚúÂâÊêÔôÃãÕõÇç]{3})/gi,
     ),
   ];
-  const dates = dateHits.map((m) => ({
-    iso: brDateToIso(m[1]),
-    weekday: m[2] ?? null,
-  })).filter((d): d is { iso: string; weekday: string | null } => Boolean(d.iso));
+  const dates: Array<{ iso: string; weekday: string | null }> = [];
+  for (const m of dateHits) {
+    const iso = brDateToIso(m[1]);
+    if (!iso) continue;
+    dates.push({ iso, weekday: m[2] ?? null });
+  }
 
   const n = dates.length;
   if (!n) return [];

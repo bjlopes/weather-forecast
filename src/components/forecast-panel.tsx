@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, X } from "lucide-react";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "@/lib/alerta-rio/forecast-types";
 import { polishProse } from "@/lib/alerta-rio/forecast-parse";
@@ -142,8 +146,7 @@ function DetailSheet({
     };
   }, [open, onClose]);
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
 
   if (!open || !mounted) return null;
 

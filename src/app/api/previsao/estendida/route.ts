@@ -3,6 +3,11 @@ export const dynamic = "force-dynamic";
 
 const URL = "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html";
 
+/**
+ * Proxy Edge da Previsão Estendida.
+ * No Node serverless da Vercel o WAF do Alertario rejeita o HTML;
+ * na Edge o fetch passa.
+ */
 export async function GET() {
   try {
     const res = await fetch(URL, {
@@ -16,21 +21,24 @@ export async function GET() {
       },
     });
     const html = await res.text();
+    if (!res.ok || html.includes("Request Rejected") || !/<tr\b/i.test(html)) {
+      return Response.json(
+        {
+          ok: false,
+          status: res.status,
+          rejected: html.includes("Request Rejected"),
+          len: html.length,
+        },
+        { status: 502, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     return Response.json(
-      {
-        runtime: "edge",
-        status: res.status,
-        len: html.length,
-        rejected: html.includes("Request Rejected"),
-        hasTr: /<tr\b/i.test(html),
-        dates: [...html.matchAll(/(\d{1,2}\/\d{1,2}\/\d{4})/g)].map((m) => m[1]),
-        head: html.slice(0, 180).replace(/\s+/g, " "),
-      },
+      { ok: true, html },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {
     return Response.json(
-      { runtime: "edge", error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 502 },
     );
   }

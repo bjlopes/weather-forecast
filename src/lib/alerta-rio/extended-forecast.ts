@@ -310,16 +310,43 @@ async function fetchAlertaHtml(url: string, referer: string): Promise<string | n
   return curlAlertaHtml(url, referer);
 }
 
+async function fetchEstendidaHtmlViaEdgeProxy(): Promise<string | null> {
+  const host = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || null;
+  if (!host) return null;
+  try {
+    const res = await fetch(`${host}/api/previsao/estendida`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { ok?: boolean; html?: string };
+    if (json.ok && typeof json.html === "string" && isUsableAlertaHtml(json.html)) {
+      return json.html;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPrevisaoEstendida(): Promise<AlertaRioDayForecast[]> {
   const candidates = [
     PREVISAO_ESTENDIDA_URL,
     `${PREVISAO_ESTENDIDA_URL}?t=${Date.now()}`,
-    "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.htm",
   ];
   for (const url of candidates) {
     const html = await fetchAlertaHtml(url, "https://alertario.rio.rj.gov.br/4-dias/");
     if (!html) continue;
     const parsed = parsePrevisaoEstendidaHtml(html);
+    if (parsed.length) return parsed;
+  }
+
+  // Vercel Node costuma levar WAF "Request Rejected"; Edge ainda acessa.
+  const viaEdge = await fetchEstendidaHtmlViaEdgeProxy();
+  if (viaEdge) {
+    const parsed = parsePrevisaoEstendidaHtml(viaEdge);
     if (parsed.length) return parsed;
   }
   return [];

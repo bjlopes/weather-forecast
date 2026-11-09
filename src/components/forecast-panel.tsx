@@ -449,7 +449,7 @@ export function ForecastDaysPanel({
         <div className="border-b border-slate-700/50 pb-3">
           <h2 className="page-title text-slate-100">Próximos dias</h2>
           <p className="mt-1 text-[13px] text-slate-400">
-            Deslize para ver todos · toque para detalhe
+            Estendida Alerta Rio · 4 dias · toque para detalhe
           </p>
         </div>
 

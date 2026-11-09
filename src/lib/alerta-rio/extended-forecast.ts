@@ -431,72 +431,39 @@ function rioTodayYmd(now = new Date()): string {
 }
 
 /**
- * Monta próximos dias a partir da Previsão Estendida (4 dias).
- * Se a Estendida pular o próximo dia (ex.: Segunda só no Previsao.html),
- * esse dia é prefixado para não sumir da lista.
+ * Próximos dias = Previsão Estendida do Alerta Rio (sempre 4 dias à frente).
+ * O dia atual fica só em "Hoje". Texto do COR entra no detalhe quando houver.
  */
 export async function enrichDaysFromAlertaRio(
   bulletin: ForecastBulletin,
 ): Promise<ForecastBulletin> {
-  const [extended, day24h] = await Promise.all([
-    fetchPrevisaoEstendida(),
-    fetchPrevisao24h(),
-  ]);
   const today = rioTodayYmd();
-  if (!extended.length && !day24h) {
-    // Sem tabelas Alerta Rio: ainda remove o dia atual do COR.
-    const days = bulletin.days.filter((day) => {
-      const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
-      if (!keys.length) return true;
-      return keys.some((iso) => iso > today);
-    });
-    return { ...bulletin, days };
-  }
 
   const corByDate = new Map<string, { day: ForecastDay; span: number }>();
   for (const day of bulletin.days) {
     const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
     for (const key of keys) {
       const prev = corByDate.get(key);
-      // Prefere entrada COR de um único dia quando houver conflito
       if (!prev || keys.length < prev.span) {
         corByDate.set(key, { day, span: keys.length });
       }
     }
   }
 
-  const byDate = new Map<string, AlertaRioDayForecast>();
-  for (const d of extended) byDate.set(d.date, d);
-
-  // Previsao.html só entra se for dia futuro (hoje fica só em "Hoje").
-  if (day24h && day24h.date > today && !byDate.has(day24h.date)) {
-    byDate.set(day24h.date, day24h);
+  const extended = await fetchPrevisaoEstendida();
+  if (extended.length) {
+    // Fonte canônica: as 4 colunas da Estendida (exceto o dia de hoje, se vier).
+    const days = extended
+      .filter((d) => d.date > today)
+      .map((d) => toForecastDay(d, corByDate));
+    return { ...bulletin, days };
   }
 
-  // Datas COR futuras anteriores ao 1º dia da Estendida.
-  const firstExtended = extended[0]?.date ?? null;
-  for (const [iso, hit] of corByDate) {
-    if (byDate.has(iso)) continue;
-    if (iso <= today) continue;
-    if (firstExtended && iso > firstExtended) continue;
-    byDate.set(iso, {
-      date: iso,
-      weekdayShort: null,
-      iconFile: null,
-      sky: hit.day.skyHint,
-      precip: hit.day.rainHint,
-      wind: hit.day.windHint,
-      tempTrend: hit.day.tempTrend,
-      tempTrendLabel: null,
-      minTempC: hit.day.minTempC,
-      maxTempC: hit.day.maxTempC,
-    });
-  }
-
-  const days = [...byDate.keys()]
-    .sort()
-    .filter((iso) => iso > today)
-    .map((iso) => toForecastDay(byDate.get(iso)!, corByDate));
-
+  // Fallback sem Estendida: dias futuros do COR / amostra.
+  const days = bulletin.days.filter((day) => {
+    const keys = dateHintToIsos(day.dateHint, bulletin.publishedAt);
+    if (!keys.length) return true;
+    return keys.every((iso) => iso > today);
+  });
   return { ...bulletin, days };
 }

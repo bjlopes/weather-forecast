@@ -2,23 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { CloudRain, RefreshCw, Search, Thermometer, Wind, X } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForecastDaysPanel, ForecastTodayPanel } from "@/components/forecast-panel";
+import { NearbyStationsPanel } from "@/components/nearby-stations";
 import { RadarPanel } from "@/components/radar-panel";
+import { UnifiedStationDetail } from "@/components/unified-station-detail";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
-import { intensityLabel, rainIntensity } from "@/lib/alerta-rio/intensity";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
-import type { AlertaRioSnapshot, RainIntensity, RainStation, ZoneName } from "@/lib/alerta-rio/types";
+import type { AlertaRioSnapshot } from "@/lib/alerta-rio/types";
+import type { StationHealth, StationNetwork, StationsSnapshot, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
 
-const ZONES: Array<ZoneName | "Todas"> = [
-  "Todas",
-  "Zona Sul",
-  "Baía de Guanabara",
-  "Barra/Jacarepaguá",
-  "Baía de Sepetiba",
+const NETWORK_FILTERS: Array<{ id: "Todas" | StationNetwork; label: string }> = [
+  { id: "Todas", label: "Todas" },
+  { id: "alerta_rio", label: "Alerta Rio" },
+  { id: "inmet", label: "INMET" },
+  { id: "cemaden", label: "CEMADEN" },
+  { id: "metar", label: "Aeroporto" },
 ];
 
 const SEGMENTS = [
@@ -28,12 +30,11 @@ const SEGMENTS = [
   { id: "estacoes", label: "Estações" },
 ] as const;
 
-const INTENSITY_CLASS: Record<RainIntensity, string> = {
-  seca: "bg-slate-800 text-slate-400",
-  fraca: "bg-brand-500/15 text-brand-400",
-  moderada: "bg-amber-500/15 text-amber-400",
-  forte: "bg-orange-500/15 text-orange-400",
-  muito_forte: "bg-red-500/15 text-red-400",
+const HEALTH_CLASS: Record<StationHealth, string> = {
+  ativa: "bg-brand-500/15 text-brand-400",
+  atrasada: "bg-amber-500/15 text-amber-400",
+  parada: "bg-red-500/15 text-red-400",
+  desconhecida: "bg-slate-800 text-slate-400",
 };
 
 function formatMm(value: number | null | undefined): string {
@@ -41,126 +42,14 @@ function formatMm(value: number | null | undefined): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-function formatMaybe(value: number | null | undefined, suffix = ""): string {
-  if (value == null) return "—";
-  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${suffix}`;
-}
-
-function StationDetail({
-  selected,
-  meteo,
-  selectedIntensity,
-  compact,
-}: {
-  selected: RainStation;
-  meteo: AlertaRioSnapshot["meteoStations"][number] | null;
-  selectedIntensity: RainIntensity;
-  compact?: boolean;
-}) {
-  const heroRain = selected.rainMm.h1 ?? selected.rainMm.m15 ?? selected.rainMm.h24;
-  const heroLabel = selected.rainMm.h1 != null ? "1 h" : selected.rainMm.m15 != null ? "15 min" : "24 h";
-
-  return (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Estação {selected.id}
-          </p>
-          <h3 className={cn("mt-1 font-bold text-slate-100", compact ? "text-xl" : "text-2xl")}>
-            {selected.name}
-          </h3>
-          <p className="mt-1 text-sm text-slate-400">
-            {selected.zone} · leitura {selected.readAt}
-          </p>
-        </div>
-        <span
-          className={cn(
-            "touch-target inline-flex items-center rounded-lg px-3 text-sm font-medium",
-            INTENSITY_CLASS[selectedIntensity],
-          )}
-        >
-          {intensityLabel(selectedIntensity)}
-        </span>
-      </div>
-
-      <div className="mt-5 rounded-xl border border-slate-700/50 bg-slate-950/60 px-4 py-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          Chuva · {heroLabel}
-        </p>
-        <p className="mt-1 text-5xl font-bold leading-none tracking-tight text-slate-100 tabular-nums">
-          {formatMm(heroRain)}
-          <span className="ml-2 text-base font-medium text-slate-500">mm</span>
-        </p>
-      </div>
-
-      <div className="mt-5 grid grid-cols-3 gap-x-3 gap-y-4">
-        {[
-          { label: "15 min", value: selected.rainMm.m15 },
-          { label: "1 h", value: selected.rainMm.h1 },
-          { label: "4 h", value: selected.rainMm.h4 },
-          { label: "24 h", value: selected.rainMm.h24 },
-          { label: "96 h", value: selected.rainMm.h96 },
-          { label: "Mês", value: selected.rainMm.month },
-        ].map((item) => (
-          <div key={item.label}>
-            <p className="text-xs text-slate-500">{item.label}</p>
-            <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-200">
-              {formatMm(item.value)}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-5 border-t border-slate-700/50 pt-4">
-        <p className="flex items-center gap-2 text-sm font-medium text-slate-200">
-          <CloudRain className="size-4 text-brand-400" />
-          Meteorologia
-        </p>
-        {meteo ? (
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            <div>
-              <p className="flex items-center gap-1 text-xs text-slate-500">
-                <Thermometer className="size-3.5" />
-                Temp.
-              </p>
-              <p className="mt-0.5 text-base font-semibold text-slate-200">
-                {formatMaybe(meteo.temperatureC, "°")}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Umidade</p>
-              <p className="mt-0.5 text-base font-semibold text-slate-200">
-                {formatMaybe(meteo.humidityPct, "%")}
-              </p>
-            </div>
-            <div>
-              <p className="flex items-center gap-1 text-xs text-slate-500">
-                <Wind className="size-3.5" />
-                Vento
-              </p>
-              <p className="mt-0.5 text-base font-semibold text-slate-200">
-                {formatMaybe(meteo.windSpeedKmh, " km/h")}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-slate-400">
-            Sem sensores meteorológicos no Tempo Real desta estação.
-          </p>
-        )}
-      </div>
-    </>
-  );
-}
-
 export function AlertaRioDashboard() {
   const [data, setData] = useState<AlertaRioSnapshot | null>(null);
+  const [stationsSnap, setStationsSnap] = useState<StationsSnapshot | null>(null);
   const [forecast, setForecast] = useState<ForecastBulletin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [zone, setZone] = useState<ZoneName | "Todas">("Todas");
-  const [selectedId, setSelectedId] = useState<number | null>(16);
+  const [network, setNetwork] = useState<"Todas" | StationNetwork>("Todas");
+  const [selectedId, setSelectedId] = useState<string | null>("alerta:16");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeSegment, setActiveSegment] = useState<(typeof SEGMENTS)[number]["id"]>("hoje");
   const [pending, setPending] = useState(false);
@@ -170,17 +59,24 @@ export function AlertaRioDashboard() {
     setPending(true);
     setError(null);
     try {
-      const [stationsRes, forecastRes] = await Promise.all([
+      const [alertaRes, stationsRes, forecastRes] = await Promise.all([
         fetch("/api/alerta-rio", { cache: "no-store" }),
+        fetch("/api/stations", { cache: "no-store" }),
         fetch("/api/previsao", { cache: "no-store" }),
       ]);
-      if (!stationsRes.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
-      const json = (await stationsRes.json()) as AlertaRioSnapshot;
+      if (!alertaRes.ok) throw new Error("Não foi possível carregar os dados do Alerta Rio.");
+      const json = (await alertaRes.json()) as AlertaRioSnapshot;
       setData(json);
-      setSelectedId((current) => {
-        if (current && json.rainStations.some((s) => s.id === current)) return current;
-        return json.rainStations[0]?.id ?? null;
-      });
+
+      if (stationsRes.ok) {
+        const snap = (await stationsRes.json()) as StationsSnapshot;
+        setStationsSnap(snap);
+        setSelectedId((current) => {
+          if (current && snap.stations.some((s) => s.id === current)) return current;
+          return snap.stations.find((s) => s.id === "alerta:16")?.id ?? snap.stations[0]?.id ?? null;
+        });
+      }
+
       if (forecastRes.ok) {
         setForecast((await forecastRes.json()) as ForecastBulletin);
       }
@@ -248,22 +144,32 @@ export function AlertaRioDashboard() {
     );
     for (const node of nodes) observer.observe(node);
     return () => observer.disconnect();
-  }, [forecast, data]);
+  }, [forecast, data, stationsSnap]);
 
   const filtered = useMemo(() => {
-    if (!data) return [] as RainStation[];
+    if (!stationsSnap) return [] as UnifiedStation[];
     const q = query.trim().toLowerCase();
-    return data.rainStations
-      .filter((s) => (zone === "Todas" ? true : s.zone === zone))
-      .filter((s) => (!q ? true : s.name.toLowerCase().includes(q) || String(s.id).includes(q)))
-      .sort((a, b) => (b.rainMm.h24 ?? 0) - (a.rainMm.h24 ?? 0));
-  }, [data, query, zone]);
+    return stationsSnap.stations
+      .filter((s) => (network === "Todas" ? true : s.network === network))
+      .filter((s) =>
+        !q
+          ? true
+          : s.name.toLowerCase().includes(q) ||
+            s.networkLabel.toLowerCase().includes(q) ||
+            s.subtitle.toLowerCase().includes(q) ||
+            s.id.toLowerCase().includes(q),
+      )
+      .sort((a, b) => {
+        const healthRank = { ativa: 0, atrasada: 1, desconhecida: 2, parada: 3 } as const;
+        const hr = healthRank[a.health] - healthRank[b.health];
+        if (hr !== 0) return hr;
+        return (b.rainMmH24 ?? -1) - (a.rainMmH24 ?? -1);
+      });
+  }, [stationsSnap, query, network]);
 
-  const selected = data?.rainStations.find((s) => s.id === selectedId) ?? null;
-  const meteo = data?.meteoStations.find((s) => s.id === selectedId) ?? null;
-  const selectedIntensity = rainIntensity(selected ? (selected.rainMm.h1 ?? selected.rainMm.m15) : null);
+  const selected = stationsSnap?.stations.find((s) => s.id === selectedId) ?? null;
 
-  const openStation = (id: number) => {
+  const openStation = (id: string) => {
     setSelectedId(id);
     setSheetOpen(true);
   };
@@ -353,12 +259,20 @@ export function AlertaRioDashboard() {
         <ForecastTodayPanel forecast={forecast} />
         <ForecastDaysPanel forecast={forecast} />
         <RadarPanel refreshToken={radarRefreshToken} />
+        <NearbyStationsPanel
+          stations={stationsSnap?.stations ?? null}
+          onOpenStation={openStation}
+        />
 
         <section id="estacoes" className="section-anchor glass rounded-xl p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="page-title text-slate-100">Estações</h2>
-              <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">Tempo Real · toque para detalhe</p>
+              <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">
+                {stationsSnap
+                  ? `${stationsSnap.counts.total} redes unificadas · toque para detalhe`
+                  : "Alerta Rio · INMET · CEMADEN · aeroportos"}
+              </p>
             </div>
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
@@ -373,19 +287,24 @@ export function AlertaRioDashboard() {
           </div>
 
           <div className="-mx-1 mt-4 flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {ZONES.map((z) => (
+            {NETWORK_FILTERS.map((item) => (
               <button
-                key={z}
+                key={item.id}
                 type="button"
-                onClick={() => setZone(z)}
+                onClick={() => setNetwork(item.id)}
                 className={cn(
                   "touch-target shrink-0 rounded-lg border px-3.5 text-sm font-medium transition-colors",
-                  zone === z
+                  network === item.id
                     ? "border-brand-500/40 bg-brand-500/20 text-brand-400"
                     : "border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200",
                 )}
               >
-                {z}
+                {item.label}
+                {stationsSnap && item.id !== "Todas" ? (
+                  <span className="ml-1 text-[11px] opacity-70">
+                    {stationsSnap.counts[item.id]}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -395,18 +314,17 @@ export function AlertaRioDashboard() {
               {error}
             </p>
           )}
-          {!data && !error && (
+          {!stationsSnap && !error && (
             <p className="mt-8 animate-pulse text-sm text-slate-500">Carregando estações…</p>
           )}
 
-          {data && (
+          {stationsSnap && (
             <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_1.05fr]">
               <ul className="max-h-[min(58dvh,32rem)] divide-y divide-slate-700/50 overflow-y-auto overscroll-contain lg:max-h-[32rem]">
                 {filtered.length === 0 && (
                   <li className="px-1 py-6 text-sm text-slate-400">Nenhuma estação encontrada.</li>
                 )}
                 {filtered.map((station) => {
-                  const intensity = rainIntensity(station.rainMm.h1 ?? station.rainMm.m15);
                   const active = station.id === selectedId;
                   return (
                     <li key={station.id}>
@@ -423,21 +341,21 @@ export function AlertaRioDashboard() {
                         <div className="min-w-0">
                           <p className="truncate font-medium text-slate-200">{station.name}</p>
                           <p className="text-xs text-slate-500">
-                            {station.zone} · {station.readAt}
+                            {station.networkLabel} · {station.readAt ?? "sem leitura"}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-sm font-bold tabular-nums text-slate-100">
-                            {formatMm(station.rainMm.h24)}
+                            {formatMm(station.rainMmH24 ?? station.rainMmH1 ?? station.rainMmM15)}
                             <span className="ml-1 text-[11px] font-medium text-slate-500">mm</span>
                           </p>
                           <span
                             className={cn(
                               "mt-1 inline-flex min-h-5 items-center rounded-md px-2 text-[11px] font-medium",
-                              INTENSITY_CLASS[intensity],
+                              HEALTH_CLASS[station.health],
                             )}
                           >
-                            {intensityLabel(intensity)}
+                            {station.healthLabel}
                           </span>
                         </div>
                       </button>
@@ -448,7 +366,7 @@ export function AlertaRioDashboard() {
 
               <aside className="hidden border-l border-slate-700/50 pl-6 lg:block">
                 {selected ? (
-                  <StationDetail selected={selected} meteo={meteo} selectedIntensity={selectedIntensity} />
+                  <UnifiedStationDetail station={selected} />
                 ) : (
                   <p className="text-sm text-slate-400">Selecione uma estação.</p>
                 )}
@@ -485,7 +403,8 @@ export function AlertaRioDashboard() {
         </section>
 
         <footer className="border-t border-slate-700/50 pt-4 pb-2 text-xs text-slate-500">
-          Fonte: Sistema Alerta Rio / Centro de Operações Rio. Não substitui avisos oficiais de emergência.
+          Fontes: Alerta Rio / COR, INMET, CEMADEN e METAR (aeroportos). Não substitui avisos oficiais de
+          emergência.
         </footer>
       </main>
 
@@ -536,7 +455,7 @@ export function AlertaRioDashboard() {
                   <X className="size-5" />
                 </button>
               </div>
-              <StationDetail selected={selected} meteo={meteo} selectedIntensity={selectedIntensity} compact />
+              <UnifiedStationDetail station={selected} compact />
             </div>
           </div>,
           document.body,

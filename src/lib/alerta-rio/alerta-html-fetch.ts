@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** Mesmo UA do TempoReal — no Vercel o Node fetch passa; curl costuma levar WAF. */
+/** Mesmo UA do TempoReal — no Vercel o Node fetch passa sem Referer. */
 const USER_AGENT = "Mozilla/5.0 (compatible; WeatherForecast/1.0)";
 
 export function isUsableAlertaHtml(html: string | null | undefined): html is string {
@@ -17,7 +17,7 @@ export function isUsableAlertaHtml(html: string | null | undefined): html is str
   return /<tr\b/i.test(html);
 }
 
-async function curlAlertaHtml(url: string, referer: string): Promise<string | null> {
+async function curlAlertaHtml(url: string): Promise<string | null> {
   const dir = await mkdtemp(join(tmpdir(), "alerta-html-"));
   const bodyPath = join(dir, "body.html");
   try {
@@ -34,8 +34,6 @@ async function curlAlertaHtml(url: string, referer: string): Promise<string | nu
         "Accept: text/html,application/xhtml+xml",
         "-H",
         "Accept-Language: pt-BR,pt;q=0.9",
-        "-H",
-        `Referer: ${referer}`,
         "-o",
         bodyPath,
         "-w",
@@ -54,13 +52,11 @@ async function curlAlertaHtml(url: string, referer: string): Promise<string | nu
   }
 }
 
-async function nodeFetchAlertaHtml(
-  url: string,
-  referer: string,
-): Promise<string | null> {
+async function nodeFetchAlertaHtml(url: string): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {
+    // Sem Referer: o WAF do Alerta Rio rejeita vários uploads quando o header vem setado.
     const res = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
@@ -68,7 +64,6 @@ async function nodeFetchAlertaHtml(
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "Accept-Language": "pt-BR,pt;q=0.9",
-        Referer: referer,
         "User-Agent": USER_AGENT,
       },
     });
@@ -83,14 +78,14 @@ async function nodeFetchAlertaHtml(
 }
 
 /**
- * Node fetch primeiro (TempoReal/Estendida liberam no Vercel).
- * Curl só como backup curto — hoje o WAF rejeita o fingerprint do curl.
+ * Node fetch primeiro, espelhando TempoReal (sem Referer).
+ * Curl só como backup curto.
  */
 export async function fetchAlertaHtml(
   url: string,
-  referer: string,
+  _referer?: string,
 ): Promise<string | null> {
-  const viaNode = await nodeFetchAlertaHtml(url, referer);
+  const viaNode = await nodeFetchAlertaHtml(url);
   if (viaNode) return viaNode;
-  return curlAlertaHtml(url, referer);
+  return curlAlertaHtml(url);
 }

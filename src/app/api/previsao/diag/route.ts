@@ -14,17 +14,27 @@ const TARGETS = [
   {
     name: "tempo-real",
     url: "https://alertario.rio.rj.gov.br/upload/TempoReal.html",
+    referer: null as string | null,
+  },
+  {
+    name: "tempo-real+ref",
+    url: "https://alertario.rio.rj.gov.br/upload/TempoReal.html",
     referer: "https://alertario.rio.rj.gov.br/",
   },
   {
     name: "previsao-24h",
     url: "https://alertario.rio.rj.gov.br/upload/Previsao.html",
-    referer: "https://alertario.rio.rj.gov.br/24-horas/",
+    referer: null as string | null,
   },
   {
     name: "estendida",
     url: "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html",
-    referer: "https://alertario.rio.rj.gov.br/4-dias/",
+    referer: null as string | null,
+  },
+  {
+    name: "estendida+ref",
+    url: "https://alertario.rio.rj.gov.br/upload/PrevisaoEstendida.html",
+    referer: "https://alertario.rio.rj.gov.br/",
   },
   {
     name: "cor-posts",
@@ -33,33 +43,30 @@ const TARGETS = [
   },
 ] as const;
 
-async function probeCurl(url: string, referer: string) {
+async function probeCurl(url: string, referer: string | null) {
   const dir = await mkdtemp(join(tmpdir(), "diag-"));
   const bodyPath = join(dir, "body");
   try {
-    const { stdout: code } = await execFileAsync(
-      "/usr/bin/curl",
-      [
-        "-sS",
-        "-L",
-        "--max-time",
-        "18",
-        "-A",
-        "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
-        "-H",
-        "Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "-H",
-        "Accept-Language: pt-BR,pt;q=0.9",
-        "-H",
-        `Referer: ${referer}`,
-        "-o",
-        bodyPath,
-        "-w",
-        "%{http_code}",
-        url,
-      ],
-      { timeout: 22_000, encoding: "utf8" },
-    );
+    const args = [
+      "-sS",
+      "-L",
+      "--max-time",
+      "18",
+      "-A",
+      "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
+      "-H",
+      "Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+      "-H",
+      "Accept-Language: pt-BR,pt;q=0.9",
+    ];
+    if (referer) {
+      args.push("-H", `Referer: ${referer}`);
+    }
+    args.push("-o", bodyPath, "-w", "%{http_code}", url);
+    const { stdout: code } = await execFileAsync("/usr/bin/curl", args, {
+      timeout: 22_000,
+      encoding: "utf8",
+    });
     const body = await readFile(bodyPath, "utf8");
     return summarize(String(code).trim(), body);
   } catch (e) {
@@ -72,17 +79,18 @@ async function probeCurl(url: string, referer: string) {
   }
 }
 
-async function probeFetch(url: string, referer: string) {
+async function probeFetch(url: string, referer: string | null) {
   try {
+    const headers: Record<string, string> = {
+      Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+      "Accept-Language": "pt-BR,pt;q=0.9",
+      "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
+    };
+    if (referer) headers.Referer = referer;
     const res = await fetch(url, {
       cache: "no-store",
       redirect: "follow",
-      headers: {
-        Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9",
-        Referer: referer,
-        "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
-      },
+      headers,
     });
     const body = await res.text();
     return summarize(String(res.status), body);

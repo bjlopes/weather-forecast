@@ -290,14 +290,11 @@ export function bulletinFromEstendidaDay(day: AlertaRioDayForecast): ForecastBul
 }
 
 export async function fetchPrevisao24h(): Promise<Previsao24hParsed | null> {
-  // Previsao.html às vezes só libera com o mesmo Referer do TempoReal.
-  const attempts = [
-    [PREVISAO_24H_URL, "https://alertario.rio.rj.gov.br/"],
-    [PREVISAO_24H_URL, PREVISAO_24H_PAGE],
-    ["https://alertario.rio.rj.gov.br/upload/Previsao.htm", "https://alertario.rio.rj.gov.br/"],
-  ] as const;
-  for (const [url, referer] of attempts) {
-    const html = await fetchAlertaHtml(url, referer);
+  for (const url of [
+    PREVISAO_24H_URL,
+    "https://alertario.rio.rj.gov.br/upload/Previsao.htm",
+  ]) {
+    const html = await fetchAlertaHtml(url);
     if (!html) continue;
     const parsed = parsePrevisao24hHtml(html);
     if (parsed) return parsed;

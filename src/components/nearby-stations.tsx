@@ -1,22 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StationRainingMark } from "@/components/station-raining-mark";
+import type { LocationStatus, UserLocation } from "@/hooks/use-user-location";
 import { distanceKm, formatDistanceKm } from "@/lib/alerta-rio/station-coords";
 import type { StationHealth, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
 
 const NEARBY_RADIUS_KM = 1.5;
-
-export type UserLocation = { lat: number; lon: number };
-
-type GeoState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; lat: number; lon: number }
-  | { status: "error"; message: string };
 
 const HEALTH_CLASS: Record<StationHealth, string> = {
   ativa: "bg-brand-500/15 text-brand-400",
@@ -25,69 +18,39 @@ const HEALTH_CLASS: Record<StationHealth, string> = {
   desconhecida: "bg-slate-800 text-slate-400",
 };
 
+export type { UserLocation };
+
 export function NearbyStationsPanel({
   stations,
   onOpenStation,
-  onLocationChange,
+  location,
+  locationStatus,
+  locationError,
+  onRequestLocation,
 }: {
   stations: UnifiedStation[] | null;
   onOpenStation: (id: string) => void;
-  /** Notifica o dashboard quando a localização fica pronta (ou some). */
-  onLocationChange?: (location: UserLocation | null) => void;
+  location: UserLocation | null;
+  locationStatus: LocationStatus;
+  locationError: string | null;
+  onRequestLocation: () => void;
 }) {
-  const [geo, setGeo] = useState<GeoState>({ status: "idle" });
-
-  useEffect(() => {
-    if (!onLocationChange) return;
-    if (geo.status === "ready") {
-      onLocationChange({ lat: geo.lat, lon: geo.lon });
-    } else {
-      onLocationChange(null);
-    }
-  }, [geo, onLocationChange]);
-
-  const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setGeo({ status: "error", message: "Geolocalização não disponível neste dispositivo." });
-      return;
-    }
-    setGeo({ status: "loading" });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGeo({
-          status: "ready",
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-        });
-      },
-      (err) => {
-        const message =
-          err.code === err.PERMISSION_DENIED
-            ? "Permissão de localização negada."
-            : err.code === err.POSITION_UNAVAILABLE
-              ? "Não foi possível obter a posição."
-              : "Tempo esgotado ao obter a localização.";
-        setGeo({ status: "error", message });
-      },
-      { enableHighAccuracy: false, timeout: 12000, maximumAge: 60_000 },
-    );
-  }, []);
-
   const nearby = useMemo(() => {
-    if (geo.status !== "ready" || !stations?.length) return [];
+    if (!location || !stations?.length) return [];
     return stations
       .map((station) => {
         if (station.lat == null || station.lon == null) return null;
-        const km = distanceKm(geo.lat, geo.lon, station.lat, station.lon);
+        const km = distanceKm(location.lat, location.lon, station.lat, station.lon);
         if (km > NEARBY_RADIUS_KM) return null;
         return { station, km };
       })
       .filter((x): x is { station: UnifiedStation; km: number } => x != null)
       .sort((a, b) => a.km - b.km)
       .slice(0, 5);
-  }, [geo, stations]);
+  }, [location, stations]);
 
   const nearest = nearby[0] ?? null;
+  const ready = locationStatus === "ready" && location != null;
 
   return (
     <section id="perto" className="section-anchor glass rounded-xl p-4 sm:p-5">
@@ -98,35 +61,35 @@ export function NearbyStationsPanel({
             Até {NEARBY_RADIUS_KM.toLocaleString("pt-BR")} km · todas as redes
           </p>
         </div>
-        {geo.status !== "ready" && (
+        {!ready && (
           <Button
             type="button"
             size="sm"
-            onClick={requestLocation}
-            disabled={geo.status === "loading" || !stations}
+            onClick={onRequestLocation}
+            disabled={locationStatus === "loading" || !stations}
             className="h-10 border-0 bg-brand-500 text-slate-950 hover:bg-brand-400"
           >
-            <Navigation className={cn("size-4", geo.status === "loading" && "animate-pulse")} />
-            {geo.status === "loading" ? "Localizando…" : "Usar localização"}
+            <Navigation className={cn("size-4", locationStatus === "loading" && "animate-pulse")} />
+            {locationStatus === "loading" ? "Localizando…" : "Usar localização"}
           </Button>
         )}
       </div>
 
-      {geo.status === "idle" && (
+      {locationStatus === "idle" && (
         <p className="mt-4 text-sm text-slate-400">
-          Ative a localização para ver estações Alerta Rio, INMET, CEMADEN e aeroportos perto de
-          você. A lista completa também passa a ordenar por proximidade.
+          Ative a localização para ver estações perto de você e ordenar a lista Estações por
+          distância.
         </p>
       )}
 
-      {geo.status === "error" && (
+      {locationStatus === "error" && (
         <div className="mt-4 space-y-3">
-          <p className="text-sm text-amber-400/90">{geo.message}</p>
+          <p className="text-sm text-amber-400/90">{locationError}</p>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={requestLocation}
+            onClick={onRequestLocation}
             className="h-10 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700/50"
           >
             Tentar de novo
@@ -134,7 +97,7 @@ export function NearbyStationsPanel({
         </div>
       )}
 
-      {geo.status === "ready" && nearest && (
+      {ready && nearest && (
         <div className="mt-4 space-y-3">
           <button
             type="button"
@@ -208,7 +171,7 @@ export function NearbyStationsPanel({
 
           <button
             type="button"
-            onClick={requestLocation}
+            onClick={onRequestLocation}
             className="text-xs font-medium text-brand-400 hover:text-brand-300"
           >
             Atualizar localização
@@ -216,10 +179,10 @@ export function NearbyStationsPanel({
         </div>
       )}
 
-      {geo.status === "ready" && !nearest && (
+      {ready && !nearest && (
         <p className="mt-4 text-sm text-slate-400">
           Nenhuma estação num raio de {NEARBY_RADIUS_KM.toLocaleString("pt-BR")} km. A lista
-          completa abaixo ainda ordena por proximidade.
+          Estações abaixo ainda ordena por proximidade.
         </p>
       )}
     </section>

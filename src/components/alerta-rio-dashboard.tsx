@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { RefreshCw, Search, X } from "lucide-react";
+import { Navigation, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForecastDaysPanel, ForecastTodayPanel } from "@/components/forecast-panel";
-import { NearbyStationsPanel, type UserLocation } from "@/components/nearby-stations";
+import { NearbyStationsPanel } from "@/components/nearby-stations";
 import { RadarPanel } from "@/components/radar-panel";
 import { StationRainingMark } from "@/components/station-raining-mark";
 import { UnifiedStationDetail } from "@/components/unified-station-detail";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
+import { useUserLocation } from "@/hooks/use-user-location";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
 import { distanceKm, formatDistanceKm } from "@/lib/alerta-rio/station-coords";
 import type { AlertaRioSnapshot } from "@/lib/alerta-rio/types";
@@ -56,11 +57,12 @@ export function AlertaRioDashboard() {
   const [activeSegment, setActiveSegment] = useState<(typeof SEGMENTS)[number]["id"]>("hoje");
   const [pending, setPending] = useState(false);
   const [radarRefreshToken, setRadarRefreshToken] = useState(0);
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
-
-  const onLocationChange = useCallback((location: UserLocation | null) => {
-    setUserLocation(location);
-  }, []);
+  const {
+    location: userLocation,
+    status: locationStatus,
+    error: locationError,
+    requestLocation,
+  } = useUserLocation();
 
   const load = useCallback(async () => {
     setPending(true);
@@ -281,7 +283,10 @@ export function AlertaRioDashboard() {
         <NearbyStationsPanel
           stations={stationsSnap?.stations ?? null}
           onOpenStation={openStation}
-          onLocationChange={onLocationChange}
+          location={userLocation}
+          locationStatus={locationStatus}
+          locationError={locationError}
+          onRequestLocation={requestLocation}
         />
 
         <section id="estacoes" className="section-anchor glass rounded-xl p-4 sm:p-5">
@@ -296,15 +301,34 @@ export function AlertaRioDashboard() {
                   : "Alerta Rio · INMET · CEMADEN · aeroportos"}
               </p>
             </div>
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar estação…"
-                className="h-11 border-slate-700 bg-slate-800 pl-9 text-slate-200 shadow-none placeholder:text-slate-500"
-                aria-label="Buscar estação"
-              />
+            <div className="flex w-full flex-col gap-2 sm:max-w-xs">
+              {!userLocation && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={requestLocation}
+                  disabled={locationStatus === "loading" || !stationsSnap}
+                  className="h-10 w-full border-0 bg-brand-500 text-slate-950 hover:bg-brand-400"
+                >
+                  <Navigation
+                    className={cn("size-4", locationStatus === "loading" && "animate-pulse")}
+                  />
+                  {locationStatus === "loading" ? "Localizando…" : "Ordenar por proximidade"}
+                </Button>
+              )}
+              {locationStatus === "error" && locationError && (
+                <p className="text-xs text-amber-400/90">{locationError}</p>
+              )}
+              <div className="relative w-full">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar estação…"
+                  className="h-11 border-slate-700 bg-slate-800 pl-9 text-slate-200 shadow-none placeholder:text-slate-500"
+                  aria-label="Buscar estação"
+                />
+              </div>
             </div>
           </div>
 

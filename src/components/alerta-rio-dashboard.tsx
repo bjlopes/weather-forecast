@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ForecastDaysPanel, ForecastTodayPanel } from "@/components/forecast-panel";
 import { NearbyStationsPanel } from "@/components/nearby-stations";
 import { RadarPanel } from "@/components/radar-panel";
+import { StationRainingMark } from "@/components/station-raining-mark";
 import { UnifiedStationDetail } from "@/components/unified-station-detail";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
@@ -339,7 +340,10 @@ export function AlertaRioDashboard() {
                         )}
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-slate-200">{station.name}</p>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <p className="truncate font-medium text-slate-200">{station.name}</p>
+                            <StationRainingMark raining={station.raining} />
+                          </div>
                           <p className="text-xs text-slate-500">
                             {station.networkLabel} · {station.readAt ?? "sem leitura"}
                           </p>

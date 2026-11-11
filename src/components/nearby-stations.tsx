@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StationRainingMark } from "@/components/station-raining-mark";
 import { distanceKm, formatDistanceKm } from "@/lib/alerta-rio/station-coords";
 import type { StationHealth, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
@@ -131,7 +132,10 @@ export function NearbyStationsPanel({
                 <MapPin className="size-3.5 text-brand-400" />
                 Mais próxima · {formatDistanceKm(nearest.km)}
               </p>
-              <p className="mt-1.5 text-lg font-bold text-slate-100">{nearest.station.name}</p>
+              <div className="mt-1.5 flex min-w-0 items-center gap-2">
+                <p className="truncate text-lg font-bold text-slate-100">{nearest.station.name}</p>
+                <StationRainingMark raining={nearest.station.raining} />
+              </div>
               <p className="mt-0.5 text-sm text-slate-400">
                 {nearest.station.networkLabel} · {nearest.station.readAt ?? "—"}
               </p>
@@ -166,7 +170,10 @@ export function NearbyStationsPanel({
                     className="flex min-h-12 w-full items-center justify-between gap-3 py-2.5 text-left transition hover:bg-slate-800/40"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-200">{station.name}</p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm font-medium text-slate-200">{station.name}</p>
+                        <StationRainingMark raining={station.raining} />
+                      </div>
                       <p className="text-xs text-slate-500">
                         {formatDistanceKm(km)} · {station.networkLabel}
                       </p>

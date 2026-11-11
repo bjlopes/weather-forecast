@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StationRainingMark } from "@/components/station-raining-mark";
@@ -9,6 +9,8 @@ import type { StationHealth, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
 
 const NEARBY_RADIUS_KM = 1.5;
+
+export type UserLocation = { lat: number; lon: number };
 
 type GeoState =
   | { status: "idle" }
@@ -26,11 +28,23 @@ const HEALTH_CLASS: Record<StationHealth, string> = {
 export function NearbyStationsPanel({
   stations,
   onOpenStation,
+  onLocationChange,
 }: {
   stations: UnifiedStation[] | null;
   onOpenStation: (id: string) => void;
+  /** Notifica o dashboard quando a localização fica pronta (ou some). */
+  onLocationChange?: (location: UserLocation | null) => void;
 }) {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
+
+  useEffect(() => {
+    if (!onLocationChange) return;
+    if (geo.status === "ready") {
+      onLocationChange({ lat: geo.lat, lon: geo.lon });
+    } else {
+      onLocationChange(null);
+    }
+  }, [geo, onLocationChange]);
 
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -101,7 +115,7 @@ export function NearbyStationsPanel({
       {geo.status === "idle" && (
         <p className="mt-4 text-sm text-slate-400">
           Ative a localização para ver estações Alerta Rio, INMET, CEMADEN e aeroportos perto de
-          você.
+          você. A lista completa também passa a ordenar por proximidade.
         </p>
       )}
 
@@ -128,7 +142,7 @@ export function NearbyStationsPanel({
             className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-4 text-left transition hover:border-brand-500/30 hover:bg-slate-900/80"
           >
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <p className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-slate-500 uppercase">
                 <MapPin className="size-3.5 text-brand-400" />
                 Mais próxima · {formatDistanceKm(nearest.km)}
               </p>
@@ -204,7 +218,8 @@ export function NearbyStationsPanel({
 
       {geo.status === "ready" && !nearest && (
         <p className="mt-4 text-sm text-slate-400">
-          Nenhuma estação num raio de {NEARBY_RADIUS_KM.toLocaleString("pt-BR")} km.
+          Nenhuma estação num raio de {NEARBY_RADIUS_KM.toLocaleString("pt-BR")} km. A lista
+          completa abaixo ainda ordena por proximidade.
         </p>
       )}
     </section>

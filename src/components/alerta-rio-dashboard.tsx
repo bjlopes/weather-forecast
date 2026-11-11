@@ -6,12 +6,13 @@ import { RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ForecastDaysPanel, ForecastTodayPanel } from "@/components/forecast-panel";
-import { NearbyStationsPanel } from "@/components/nearby-stations";
+import { NearbyStationsPanel, type UserLocation } from "@/components/nearby-stations";
 import { RadarPanel } from "@/components/radar-panel";
 import { StationRainingMark } from "@/components/station-raining-mark";
 import { UnifiedStationDetail } from "@/components/unified-station-detail";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
+import { distanceKm, formatDistanceKm } from "@/lib/alerta-rio/station-coords";
 import type { AlertaRioSnapshot } from "@/lib/alerta-rio/types";
 import type { StationHealth, StationNetwork, StationsSnapshot, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,11 @@ export function AlertaRioDashboard() {
   const [activeSegment, setActiveSegment] = useState<(typeof SEGMENTS)[number]["id"]>("hoje");
   const [pending, setPending] = useState(false);
   const [radarRefreshToken, setRadarRefreshToken] = useState(0);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+
+  const onLocationChange = useCallback((location: UserLocation | null) => {
+    setUserLocation(location);
+  }, []);
 
   const load = useCallback(async () => {
     setPending(true);
@@ -148,8 +154,9 @@ export function AlertaRioDashboard() {
   }, [forecast, data, stationsSnap]);
 
   const filtered = useMemo(() => {
-    if (!stationsSnap) return [] as UnifiedStation[];
+    if (!stationsSnap) return [] as Array<UnifiedStation & { distanceKm: number | null }>;
     const q = query.trim().toLowerCase();
+    const healthRank = { ativa: 0, atrasada: 1, desconhecida: 2, parada: 3 } as const;
     return stationsSnap.stations
       .filter((s) => (network === "Todas" ? true : s.network === network))
       .filter((s) =>
@@ -160,13 +167,24 @@ export function AlertaRioDashboard() {
             s.subtitle.toLowerCase().includes(q) ||
             s.id.toLowerCase().includes(q),
       )
+      .map((s) => {
+        const km =
+          userLocation && s.lat != null && s.lon != null
+            ? distanceKm(userLocation.lat, userLocation.lon, s.lat, s.lon)
+            : null;
+        return { ...s, distanceKm: km };
+      })
       .sort((a, b) => {
-        const healthRank = { ativa: 0, atrasada: 1, desconhecida: 2, parada: 3 } as const;
+        if (userLocation) {
+          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          if (da !== db) return da - db;
+        }
         const hr = healthRank[a.health] - healthRank[b.health];
         if (hr !== 0) return hr;
         return (b.rainMmH24 ?? -1) - (a.rainMmH24 ?? -1);
       });
-  }, [stationsSnap, query, network]);
+  }, [stationsSnap, query, network, userLocation]);
 
   const selected = stationsSnap?.stations.find((s) => s.id === selectedId) ?? null;
 
@@ -263,6 +281,7 @@ export function AlertaRioDashboard() {
         <NearbyStationsPanel
           stations={stationsSnap?.stations ?? null}
           onOpenStation={openStation}
+          onLocationChange={onLocationChange}
         />
 
         <section id="estacoes" className="section-anchor glass rounded-xl p-4 sm:p-5">
@@ -271,7 +290,9 @@ export function AlertaRioDashboard() {
               <h2 className="page-title text-slate-100">Estações</h2>
               <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">
                 {stationsSnap
-                  ? `${stationsSnap.counts.total} redes unificadas · toque para detalhe`
+                  ? userLocation
+                    ? `${stationsSnap.counts.total} redes · ordenadas por proximidade`
+                    : `${stationsSnap.counts.total} redes unificadas · toque para detalhe`
                   : "Alerta Rio · INMET · CEMADEN · aeroportos"}
               </p>
             </div>
@@ -345,6 +366,9 @@ export function AlertaRioDashboard() {
                             <StationRainingMark raining={station.raining} />
                           </div>
                           <p className="text-xs text-slate-500">
+                            {station.distanceKm != null
+                              ? `${formatDistanceKm(station.distanceKm)} · `
+                              : ""}
                             {station.networkLabel} · {station.readAt ?? "sem leitura"}
                           </p>
                         </div>

@@ -366,14 +366,21 @@ export function AlertaRioDashboard() {
                             <StationRainingMark raining={station.raining} />
                           </div>
                           <p className="text-xs text-slate-500">
-                            {station.distanceKm != null
-                              ? `${formatDistanceKm(station.distanceKm)} · `
-                              : ""}
                             {station.networkLabel} · {station.readAt ?? "sem leitura"}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-bold tabular-nums text-slate-100">
+                          {station.distanceKm != null && (
+                            <p className="text-sm font-semibold tabular-nums text-brand-400">
+                              {formatDistanceKm(station.distanceKm)}
+                            </p>
+                          )}
+                          <p
+                            className={cn(
+                              "text-sm font-bold tabular-nums text-slate-100",
+                              station.distanceKm != null && "mt-0.5",
+                            )}
+                          >
                             {formatMm(station.rainMmH24 ?? station.rainMmH1 ?? station.rainMmM15)}
                             <span className="ml-1 text-[11px] font-medium text-slate-500">mm</span>
                           </p>

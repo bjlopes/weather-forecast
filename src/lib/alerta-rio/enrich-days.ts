@@ -163,13 +163,21 @@ function toForecastDay(
   };
 }
 
+function rioDayKey(isoOrDate: string | Date): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate);
+  } catch {
+    return typeof isoOrDate === "string" ? isoOrDate.slice(0, 10) : "";
+  }
+}
+
 function rioTodayYmd(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return rioDayKey(now);
 }
 
 /**
@@ -194,8 +202,10 @@ export async function enrichDaysFromAlertaRio(
 
   const extended = await fetchPrevisaoEstendida();
   if (extended.length) {
+    const bulletinDay = rioDayKey(bulletin.publishedAt);
     const days = extended
-      .filter((d) => d.date > today)
+      // Próximos dias: futuros, sem repetir o dia já usado em "Hoje".
+      .filter((d) => d.date > today && d.date !== bulletinDay)
       .map((d) => toForecastDay(d, corByDate));
     return { ...bulletin, days, daysSource: "estendida" };
   }

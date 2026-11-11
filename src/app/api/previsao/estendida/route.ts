@@ -1,9 +1,9 @@
 import { fetchPrevisaoEstendida } from "@/lib/alerta-rio/estendida-fetch";
 
-export const runtime = "edge";
+// Node (não Edge): curl furar WAF do upload/PrevisaoEstendida.html.
 export const dynamic = "force-dynamic";
 
-/** Diagnóstico / fonte Edge da Estendida (dias já parseados). */
+/** Diagnóstico / fonte da Estendida (dias já parseados). */
 export async function GET() {
   try {
     const days = await fetchPrevisaoEstendida();

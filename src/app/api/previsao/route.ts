@@ -1,6 +1,6 @@
 import { getForecastBulletin } from "@/lib/alerta-rio/forecast-fetch";
 
-export const runtime = "edge";
+// Node (não Edge): precisa de curl para furar o WAF do Alerta Rio, como o radar.
 export const dynamic = "force-dynamic";
 
 export async function GET() {

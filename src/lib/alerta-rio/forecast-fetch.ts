@@ -6,6 +6,10 @@ import {
 } from "./forecast-parse";
 import { SAMPLE_FORECAST } from "./forecast-sample";
 import type { ForecastBulletin } from "./forecast-types";
+import {
+  bulletinFromPrevisao24h,
+  fetchPrevisao24h,
+} from "./previsao-24h";
 
 const COR_POSTS_URL =
   "https://cor.rio/wp-json/wp/v2/posts?categories=29&per_page=8&_fields=id,date,slug,link,title,content";
@@ -50,17 +54,25 @@ function hasTemperatureInfo(b: ForecastBulletin): boolean {
   );
 }
 
-export async function getForecastBulletin(): Promise<ForecastBulletin> {
+function isStaleForToday(publishedAt: string, now = new Date()): boolean {
+  return rioDayKey(publishedAt) < rioDayKey(now.toISOString());
+}
+
+async function fetchCorBulletin(): Promise<ForecastBulletin | null> {
   try {
     const res = await fetch(COR_POSTS_URL, {
       cache: "no-store",
       headers: {
         Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+        Referer: "https://cor.rio/",
       },
     });
-    if (!res.ok) throw new Error(`COR API ${res.status}`);
+    if (!res.ok) return null;
     const posts = (await res.json()) as WpPost[];
+    if (!Array.isArray(posts) || !posts.length) return null;
 
     const bulletins = posts
       .filter((p) => isForecastPost(decodeTitle(p.title.rendered), p.content.rendered))
@@ -73,15 +85,11 @@ export async function getForecastBulletin(): Promise<ForecastBulletin> {
         }),
       );
 
-    if (!bulletins.length) throw new Error("Nenhum boletim de previsão encontrado");
+    if (!bulletins.length) return null;
 
     let primary = bulletins[0];
-    if (!primary.synoptic && !primary.detail24h) {
-      throw new Error("Boletim sem texto utilizável");
-    }
+    if (!primary.synoptic && !primary.detail24h) return null;
 
-    // Atualizações curtas (ex.: noite) às vezes omitem mín/máx/tendência —
-    // completa com boletim anterior do mesmo dia no Rio.
     if (!hasTemperatureInfo(primary)) {
       const day = rioDayKey(primary.publishedAt);
       const donor = bulletins.find(
@@ -90,12 +98,45 @@ export async function getForecastBulletin(): Promise<ForecastBulletin> {
       if (donor) primary = mergeTemperatureFields(primary, donor);
     }
 
-    return enrichDaysFromAlertaRio(primary);
+    return primary;
   } catch {
-    return enrichDaysFromAlertaRio({
-      ...SAMPLE_FORECAST,
-      fetchedAt: new Date().toISOString(),
-      source: "sample",
-    });
+    return null;
   }
+}
+
+async function fetchAlertaTodayBulletin(): Promise<ForecastBulletin | null> {
+  try {
+    const day = await fetchPrevisao24h();
+    if (!day) return null;
+    return bulletinFromPrevisao24h(day);
+  } catch {
+    return null;
+  }
+}
+
+export async function getForecastBulletin(): Promise<ForecastBulletin> {
+  const fromCor = await fetchCorBulletin();
+  // COR às vezes responde, mas com boletim de dias anteriores — nesse caso
+  // preferimos o Previsao.html do Alerta Rio (atualizado com mais frequência).
+  if (fromCor && !isStaleForToday(fromCor.publishedAt)) {
+    return enrichDaysFromAlertaRio(fromCor);
+  }
+
+  const fromAlerta = await fetchAlertaTodayBulletin();
+  if (fromAlerta) {
+    // Se o COR trouxe texto útil do mesmo ciclo, podemos complementar depois —
+    // por ora o boletim 24h oficial é a fonte viva de "Hoje".
+    return enrichDaysFromAlertaRio(fromAlerta);
+  }
+
+  if (fromCor) {
+    // Melhor um COR atrasado do que a amostra estática.
+    return enrichDaysFromAlertaRio(fromCor);
+  }
+
+  return enrichDaysFromAlertaRio({
+    ...SAMPLE_FORECAST,
+    fetchedAt: new Date().toISOString(),
+    source: "sample",
+  });
 }

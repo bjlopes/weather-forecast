@@ -217,6 +217,15 @@ export function ForecastTodayPanel({
   const detail24h = polishProse(forecast.detail24h);
   const todayKind = weatherKindFromText(title, detail24h, synoptic);
   const todayMeta = weatherMeta(todayKind);
+  const fromAlerta =
+    forecast.source === "live" && /alertario\.rio/i.test(forecast.sourceUrl);
+  const sourceLabel =
+    forecast.source === "sample"
+      ? "Amostra"
+      : fromAlerta
+        ? "Alerta Rio · 24h"
+        : "Boletim COR";
+  const sourceHrefLabel = fromAlerta ? "Fonte oficial Alerta Rio" : "Fonte oficial COR";
 
   return (
     <>
@@ -225,7 +234,7 @@ export function ForecastTodayPanel({
           <div className="min-w-0 flex-1">
             <h2 className="page-title text-slate-100">Hoje</h2>
             <p className="mt-1 text-[12px] text-slate-500 sm:text-[13px]">
-              Boletim COR · {formatPublished(forecast.publishedAt)}
+              {sourceLabel} · {formatPublished(forecast.publishedAt)}
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -267,14 +276,14 @@ export function ForecastTodayPanel({
           rel="noreferrer"
           className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-brand-400"
         >
-          Fonte oficial COR
+          {sourceHrefLabel}
         </a>
       </section>
 
       <DetailSheet
         open={open}
         title="Próximas 24 horas"
-        subtitle={`Boletim COR · ${formatPublished(forecast.publishedAt)}`}
+        subtitle={`${sourceLabel} · ${formatPublished(forecast.publishedAt)}`}
         onClose={() => setOpen(false)}
       >
         <div className="mb-4 flex items-center gap-3">

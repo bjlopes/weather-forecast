@@ -7,6 +7,7 @@ export const PREVISAO_24H_URL =
   "https://alertario.rio.rj.gov.br/upload/Previsao.html";
 
 export const PREVISAO_24H_PAGE = "https://alertario.rio.rj.gov.br/24-horas/";
+export const PREVISAO_ESTENDIDA_PAGE = "https://alertario.rio.rj.gov.br/4-dias/";
 
 function stripTags(html: string): string {
   return html
@@ -207,22 +208,25 @@ function detailFromPeriods(day: Previsao24hParsed): string {
     .join(". "));
 }
 
-/** Monta o cartão "Hoje" a partir do boletim oficial de 24h do Alerta Rio. */
-export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulletin {
+function bulletinFromAlertaDay(
+  day: AlertaRioDayForecast,
+  opts: {
+    sourceUrl: string;
+    detail24h?: string;
+  },
+): ForecastBulletin {
   const [, month, dayNum] = day.date.split("-");
   const label = weekdayFullLabel(day.weekdayShort, day.date);
   const dateHint = `${Number(dayNum)}/${Number(month)}`;
   const rain = day.precip ? polishProse(day.precip) : null;
   const sky = day.sky ? polishProse(day.sky) : null;
+  const wind = day.wind ? polishProse(day.wind) : null;
   const titleBits = [
     `${label} (${dateHint})`,
     rain && !/sem chuva/i.test(rain) ? rain : sky ? `céu ${sky.toLowerCase()}` : null,
     day.maxTempC != null ? `temperatura máxima prevista de ${day.maxTempC}°C` : null,
   ].filter(Boolean);
 
-  const detail24h = detailFromPeriods(day);
-  // A "descrição sinótica" do HTML costuma ser retrospectiva (dia anterior) —
-  // para "Hoje" sintetizamos a partir da tabela de períodos.
   const synoptic = polishProse(
     [
       `Previsão oficial do Sistema Alerta Rio para ${label.toLowerCase()} (${dateHint})`,
@@ -233,10 +237,33 @@ export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulleti
       .join(" "),
   );
 
+  const detail24h =
+    opts.detail24h ??
+    polishProse(
+      [
+        sky ? `Céu ${sky.toLowerCase()}` : null,
+        rain,
+        wind ? `Ventos ${wind.toLowerCase()}` : null,
+        day.tempTrendLabel
+          ? `Temperaturas em ${day.tempTrendLabel.toLowerCase()}`
+          : null,
+        day.minTempC != null || day.maxTempC != null
+          ? `com ${[
+              day.minTempC != null ? `mínima prevista de ${day.minTempC}°C` : null,
+              day.maxTempC != null ? `máxima de ${day.maxTempC}°C` : null,
+            ]
+              .filter(Boolean)
+              .join(" e ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(". "),
+    );
+
   return {
     fetchedAt: new Date().toISOString(),
     source: "live",
-    sourceUrl: PREVISAO_24H_PAGE,
+    sourceUrl: opts.sourceUrl,
     title: polishProse(titleBits.join(" com ")).replace(/ com temperatura/, " e temperatura"),
     publishedAt: `${day.date}T12:00:00-03:00`,
     synoptic,
@@ -249,7 +276,31 @@ export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulleti
   };
 }
 
+/** Monta o cartão "Hoje" a partir do boletim oficial de 24h do Alerta Rio. */
+export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulletin {
+  return bulletinFromAlertaDay(day, {
+    sourceUrl: PREVISAO_24H_PAGE,
+    detail24h: detailFromPeriods(day),
+  });
+}
+
+/** Fallback: usa o dia de hoje (ou o mais próximo) da Estendida. */
+export function bulletinFromEstendidaDay(day: AlertaRioDayForecast): ForecastBulletin {
+  return bulletinFromAlertaDay(day, { sourceUrl: PREVISAO_ESTENDIDA_PAGE });
+}
+
 export async function fetchPrevisao24h(): Promise<Previsao24hParsed | null> {
-  const html = await fetchAlertaHtml(PREVISAO_24H_URL, PREVISAO_24H_PAGE);
-  return html ? parsePrevisao24hHtml(html) : null;
+  // Previsao.html às vezes só libera com o mesmo Referer do TempoReal.
+  const attempts = [
+    [PREVISAO_24H_URL, "https://alertario.rio.rj.gov.br/"],
+    [PREVISAO_24H_URL, PREVISAO_24H_PAGE],
+    ["https://alertario.rio.rj.gov.br/upload/Previsao.htm", "https://alertario.rio.rj.gov.br/"],
+  ] as const;
+  for (const [url, referer] of attempts) {
+    const html = await fetchAlertaHtml(url, referer);
+    if (!html) continue;
+    const parsed = parsePrevisao24hHtml(html);
+    if (parsed) return parsed;
+  }
+  return null;
 }

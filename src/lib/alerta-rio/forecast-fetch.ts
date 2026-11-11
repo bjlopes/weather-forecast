@@ -1,4 +1,5 @@
 import { enrichDaysFromAlertaRio } from "./enrich-days";
+import { fetchPrevisaoEstendida } from "./estendida-fetch";
 import {
   parseForecastHtml,
   isForecastPost,
@@ -7,6 +8,7 @@ import {
 import { SAMPLE_FORECAST } from "./forecast-sample";
 import type { ForecastBulletin } from "./forecast-types";
 import {
+  bulletinFromEstendidaDay,
   bulletinFromPrevisao24h,
   fetchPrevisao24h,
 } from "./previsao-24h";
@@ -64,8 +66,7 @@ async function fetchCorBulletin(): Promise<ForecastBulletin | null> {
       cache: "no-store",
       headers: {
         Accept: "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (compatible; WeatherForecast/1.0)",
         "Accept-Language": "pt-BR,pt;q=0.9",
         Referer: "https://cor.rio/",
       },
@@ -106,9 +107,16 @@ async function fetchCorBulletin(): Promise<ForecastBulletin | null> {
 
 async function fetchAlertaTodayBulletin(): Promise<ForecastBulletin | null> {
   try {
-    const day = await fetchPrevisao24h();
-    if (!day) return null;
-    return bulletinFromPrevisao24h(day);
+    const day24 = await fetchPrevisao24h();
+    if (day24) return bulletinFromPrevisao24h(day24);
+
+    // Previsao.html costuma estar no WAF; Estendida (Node) ainda libera no Vercel.
+    const extended = await fetchPrevisaoEstendida();
+    if (!extended.length) return null;
+    const today = rioDayKey(new Date().toISOString());
+    const todayHit = extended.find((d) => d.date === today);
+    const pick = todayHit ?? extended[0];
+    return bulletinFromEstendidaDay(pick);
   } catch {
     return null;
   }
@@ -116,21 +124,16 @@ async function fetchAlertaTodayBulletin(): Promise<ForecastBulletin | null> {
 
 export async function getForecastBulletin(): Promise<ForecastBulletin> {
   const fromCor = await fetchCorBulletin();
-  // COR às vezes responde, mas com boletim de dias anteriores — nesse caso
-  // preferimos o Previsao.html do Alerta Rio (atualizado com mais frequência).
   if (fromCor && !isStaleForToday(fromCor.publishedAt)) {
     return enrichDaysFromAlertaRio(fromCor);
   }
 
   const fromAlerta = await fetchAlertaTodayBulletin();
   if (fromAlerta) {
-    // Se o COR trouxe texto útil do mesmo ciclo, podemos complementar depois —
-    // por ora o boletim 24h oficial é a fonte viva de "Hoje".
     return enrichDaysFromAlertaRio(fromAlerta);
   }
 
   if (fromCor) {
-    // Melhor um COR atrasado do que a amostra estática.
     return enrichDaysFromAlertaRio(fromCor);
   }
 

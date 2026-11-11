@@ -219,12 +219,15 @@ export function ForecastTodayPanel({
   const todayMeta = weatherMeta(todayKind);
   const fromAlerta =
     forecast.source === "live" && /alertario\.rio/i.test(forecast.sourceUrl);
+  const fromEstendida = fromAlerta && /4-dias/i.test(forecast.sourceUrl);
   const sourceLabel =
     forecast.source === "sample"
       ? "Amostra"
-      : fromAlerta
-        ? "Alerta Rio · 24h"
-        : "Boletim COR";
+      : fromEstendida
+        ? "Alerta Rio · estendida"
+        : fromAlerta
+          ? "Alerta Rio · 24h"
+          : "Boletim COR";
   const sourceHrefLabel = fromAlerta ? "Fonte oficial Alerta Rio" : "Fonte oficial COR";
 
   return (

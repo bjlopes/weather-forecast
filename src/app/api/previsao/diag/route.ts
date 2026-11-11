@@ -98,11 +98,24 @@ function summarize(status: string, body: string) {
   const rejected = body.includes("Request Rejected");
   const bot = /bot verification|lsrecaptcha/i.test(body);
   const hasTr = /<tr\b/i.test(body);
-  let parsed24 = 0;
-  let parsedExt = 0;
-  if (hasTr && !rejected) {
-    parsed24 = parsePrevisao24hHtml(body) ? 1 : 0;
-    parsedExt = parsePrevisaoEstendidaHtml(body).length;
+  let parsed24: Record<string, unknown> | null = null;
+  let parsedExt: Array<{ date: string; precip: string | null; maxTempC: number | null }> = [];
+  if (hasTr && !rejected && !bot) {
+    const day = parsePrevisao24hHtml(body);
+    if (day) {
+      parsed24 = {
+        date: day.date,
+        sky: day.sky,
+        precip: day.precip,
+        minTempC: day.minTempC,
+        maxTempC: day.maxTempC,
+      };
+    }
+    parsedExt = parsePrevisaoEstendidaHtml(body).map((d) => ({
+      date: d.date,
+      precip: d.precip,
+      maxTempC: d.maxTempC,
+    }));
   }
   return {
     ok: status === "200" && !rejected && !bot && body.length > 400,

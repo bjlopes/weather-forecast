@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** Mesmo UA do TempoReal — no Vercel o Node fetch passa sem Referer. */
+/** Mesmo UA do TempoReal. */
 const USER_AGENT = "Mozilla/5.0 (compatible; WeatherForecast/1.0)";
 
 export function isUsableAlertaHtml(html: string | null | undefined): html is string {
@@ -56,7 +56,6 @@ async function nodeFetchAlertaHtml(url: string): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {
-    // Sem Referer: o WAF do Alerta Rio rejeita vários uploads quando o header vem setado.
     const res = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
@@ -78,8 +77,36 @@ async function nodeFetchAlertaHtml(url: string): Promise<string | null> {
 }
 
 /**
- * Node fetch primeiro, espelhando TempoReal (sem Referer).
- * Curl só como backup curto.
+ * Quando o WAF municipal bloqueia o IP da Vercel, o Jina Reader ainda consegue
+ * espelhar alguns uploads (ex.: Estendida) e devolver HTML bruto.
+ */
+async function jinaFetchAlertaHtml(url: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      signal: controller.signal,
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": USER_AGENT,
+        "X-Return-Format": "html",
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    return isUsableAlertaHtml(html) ? html : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Node direto → curl → proxy Jina (HTML).
+ * TempoReal costuma passar no Node; Estendida oscila e cai no Jina.
  */
 export async function fetchAlertaHtml(
   url: string,
@@ -87,5 +114,7 @@ export async function fetchAlertaHtml(
 ): Promise<string | null> {
   const viaNode = await nodeFetchAlertaHtml(url);
   if (viaNode) return viaNode;
-  return curlAlertaHtml(url);
+  const viaCurl = await curlAlertaHtml(url);
+  if (viaCurl) return viaCurl;
+  return jinaFetchAlertaHtml(url);
 }

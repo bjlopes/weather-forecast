@@ -10,6 +10,8 @@ import {
   pickActivePeriod,
   type DayPeriodName,
 } from "./forecast-zone";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fetchAlertaHtml, markdownTablesToHtml } from "./alerta-html-fetch";
 import type { AlertaRioDayForecast } from "./estendida-parse";
 
@@ -416,6 +418,23 @@ export function bulletinFromEstendidaDay(day: AlertaRioDayForecast): ForecastBul
   return bulletinFromAlertaDay(day, { sourceUrl: PREVISAO_ESTENDIDA_PAGE });
 }
 
+/** Cache commitado no repo — atualizado pelo workflow quando o WAF libera o HTML. */
+async function loadCachedPrevisao24hHtml(): Promise<string | null> {
+  const candidates = [
+    join(process.cwd(), "src/lib/alerta-rio/previsao-24h-latest.html"),
+    join(process.cwd(), "previsao-24h-latest.html"),
+  ];
+  for (const path of candidates) {
+    try {
+      const html = await readFile(path, "utf8");
+      if (html.length > 400) return html;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
 export async function fetchPrevisao24h(): Promise<Previsao24hParsed | null> {
   for (const url of [
     PREVISAO_24H_URL,
@@ -428,5 +447,27 @@ export async function fetchPrevisao24h(): Promise<Previsao24hParsed | null> {
     const parsed = parsePrevisao24hHtml(html);
     if (parsed) return parsed;
   }
+
+  // Fallback: último boletim espelhado no repositório (GitHub Action).
+  const cached = await loadCachedPrevisao24hHtml();
+  if (cached) {
+    const parsed = parsePrevisao24hHtml(cached);
+    if (parsed && !isPrevisao24hStale(parsed)) return parsed;
+  }
   return null;
+}
+
+/** Aceita cache do dia corrente ou com período que ainda cobre “agora”. */
+function isPrevisao24hStale(day: Previsao24hParsed): boolean {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  if (day.date === today) return false;
+  if (day.periods?.some((p) => p.date === today)) return false;
+  // Permite madrugada do dia seguinte ainda no boletim de ontem.
+  if (day.periods?.some((p) => p.date && p.date >= today)) return false;
+  return true;
 }

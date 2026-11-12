@@ -1,0 +1,66 @@
+name: Refresh Previsao 24h cache
+
+on:
+  schedule:
+    # A cada 30 min — boletim do Alerta Rio muda ao longo do dia.
+    - cron: "5,35 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Previsao.html
+        id: fetch
+        run: |
+          set -euo pipefail
+          OUT="src/lib/alerta-rio/previsao-24h-latest.html"
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          REF='https://alertario.rio.rj.gov.br/24-horas/'
+          ok=0
+          for url in \
+            'https://alertario.rio.rj.gov.br/upload/Previsao.html' \
+            'https://www.sistema-alerta-rio.com.br/upload/Previsao.html'
+          do
+            code=$(curl -sS -L --max-time 25 -A "$UA" \
+              -H "Accept: text/html,application/xhtml+xml" \
+              -H "Accept-Language: pt-BR,pt;q=0.9" \
+              -H "Referer: $REF" \
+              -o /tmp/previsao.html -w '%{http_code}' "$url" || true)
+            if [ "$code" = "200" ] \
+              && ! grep -qi 'Request Rejected' /tmp/previsao.html \
+              && grep -qiE 'madrugada|manh|tarde|noite' /tmp/previsao.html \
+              && grep -qiE 'm[aá]x' /tmp/previsao.html \
+              && [ "$(wc -c </tmp/previsao.html)" -gt 800 ]
+            then
+              cp /tmp/previsao.html "$OUT"
+              echo "Fetched from $url"
+              ok=1
+              break
+            fi
+            echo "Skip $url (HTTP $code)"
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Alerta Rio unreachable; keeping previous cache."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit cache if changed
+        if: steps.fetch.outputs.updated == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/alerta-rio/previsao-24h-latest.html
+          if git diff --staged --quiet; then
+            echo "No content change."
+            exit 0
+          fi
+          git commit -m "chore: refresh Previsao 24h cache"
+          git push

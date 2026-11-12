@@ -207,7 +207,7 @@ function DetailSheet({
 }
 
 function periodSummary(period: ForecastPeriod): string {
-  return polishProse(
+  const text = polishProse(
     [
       period.sky ? `Céu ${period.sky.toLowerCase()}` : null,
       period.precip,
@@ -216,6 +216,25 @@ function periodSummary(period: ForecastPeriod): string {
       .filter(Boolean)
       .join(". "),
   );
+  return text || "Detalhe do período ainda não publicado no boletim 24h.";
+}
+
+/** Completa período sem colunas no 24h com o resumo do dia (Estendida). */
+function enrichPeriodFromDays(
+  period: ForecastPeriod,
+  days: ForecastDay[] | undefined,
+): ForecastPeriod {
+  if (period.sky || period.precip || period.wind) return period;
+  if (!days?.length || !period.dateHint) return period;
+  const day = days.find((d) => d.dateHint === period.dateHint);
+  if (!day) return period;
+  return {
+    ...period,
+    sky: day.skyHint,
+    precip: day.rainHint,
+    wind: day.windHint,
+    tempTrend: period.tempTrend ?? day.tempTrend,
+  };
 }
 
 /** Sinótica sempre completa; destaca o período atual do boletim 24h. */
@@ -240,7 +259,9 @@ export function ForecastTodayPanel({
 
   const periods = forecast.periods ?? [];
   const activePeriod = pickActivePeriod(periods);
-  const nextPeriods = upcomingPeriods(periods, activePeriod);
+  const nextPeriods = upcomingPeriods(periods, activePeriod).map((period) =>
+    enrichPeriodFromDays(period as ForecastPeriod, forecast.days),
+  );
 
   const preferredZone = userLocation
     ? forecastZoneForLatLon(userLocation.lat, userLocation.lon)

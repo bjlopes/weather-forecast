@@ -58,6 +58,14 @@ export const DAY_PERIOD_LABEL: Record<DayPeriodName, string> = {
   noite: "Noite",
 };
 
+/** Ordem cronológica no dia civil (madrugada → … → noite → madrugada do dia seguinte). */
+export const DAY_PERIOD_ORDER: readonly DayPeriodName[] = [
+  "madrugada",
+  "manhã",
+  "tarde",
+  "noite",
+] as const;
+
 /** Período do boletim 24h conforme horário em America/Sao_Paulo. */
 export function currentDayPeriod(now = new Date()): DayPeriodName {
   let hour = 12;
@@ -91,7 +99,7 @@ export function pickZoneTemp<T extends { zone: string }>(
   return centro ?? zones[0] ?? null;
 }
 
-function rioDayKey(now = new Date()): string {
+export function rioDayKey(now = new Date()): string {
   try {
     return new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/Sao_Paulo",
@@ -104,38 +112,158 @@ function rioDayKey(now = new Date()): string {
   }
 }
 
-/**
- * Escolhe o período do boletim 24h alinhado ao horário atual.
- * O HTML do Alerta Rio é rolante (ex.: Manhã→Tarde→Noite→Madrugada do dia seguinte),
- * então prioriza o período de hoje; se já saiu da tabela, usa a 1ª coluna.
- */
-export function pickActivePeriod<T extends { name: DayPeriodName; date?: string | null }>(
-  periods: T[] | undefined,
-  now = new Date(),
-): T | null {
-  if (!periods?.length) return null;
-  const want = currentDayPeriod(now);
-  const today = rioDayKey(now);
-  const exactToday = periods.find((p) => p.name === want && p.date === today);
-  if (exactToday) return exactToday;
-  const sameName = periods.find((p) => p.name === want && !p.date);
-  if (sameName) return sameName;
-  return periods[0] ?? null;
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (![y, m, d].every((n) => Number.isFinite(n))) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+export function dateHintFromIso(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return `${Number(m[3])}/${Number(m[2])}`;
+}
+
+export type PeriodSlot = {
+  name: DayPeriodName;
+  label: string;
+  date: string;
+  dateHint: string;
+};
+
+/** Avança um período na linha do tempo (noite → madrugada do dia seguinte). */
+export function advancePeriodSlot(name: DayPeriodName, date: string): PeriodSlot {
+  const idx = DAY_PERIOD_ORDER.indexOf(name);
+  if (idx < 0 || idx === DAY_PERIOD_ORDER.length - 1) {
+    const nextDate = addDaysIso(date, 1);
+    return {
+      name: "madrugada",
+      label: DAY_PERIOD_LABEL.madrugada,
+      date: nextDate,
+      dateHint: dateHintFromIso(nextDate),
+    };
+  }
+  const nextName = DAY_PERIOD_ORDER[idx + 1];
+  return {
+    name: nextName,
+    label: DAY_PERIOD_LABEL[nextName],
+    date,
+    dateHint: dateHintFromIso(date),
+  };
 }
 
 /**
- * Períodos seguintes ao atual no boletim rolante de 24h.
- * Ex.: se agora é manhã → tarde, noite e madrugada.
+ * Sempre os 3 períodos civis seguintes ao atual.
+ * Ex.: tarde 12/11 → noite 12/11, madrugada 13/11, manhã 13/11.
  */
-export function upcomingPeriods<T extends { name: DayPeriodName; date?: string | null }>(
+export function nextThreePeriodSlots(
+  fromName: DayPeriodName,
+  fromDate: string,
+): PeriodSlot[] {
+  const out: PeriodSlot[] = [];
+  let name = fromName;
+  let date = fromDate;
+  for (let i = 0; i < 3; i++) {
+    const next = advancePeriodSlot(name, date);
+    out.push(next);
+    name = next.name;
+    date = next.date;
+  }
+  return out;
+}
+
+/**
+ * Escolhe o período do boletim 24h alinhado ao horário atual.
+ * O HTML do Alerta Rio é rolante (ex.: Manhã→Tarde→Noite→Madrugada do dia seguinte),
+ * então prioriza o período de hoje; se já saiu da tabela, sintetiza pelo relógio.
+ */
+export function pickActivePeriod<
+  T extends {
+    name: DayPeriodName;
+    label?: string;
+    date?: string | null;
+    dateHint?: string | null;
+  },
+>(periods: T[] | undefined, now = new Date()): T | null {
+  const want = currentDayPeriod(now);
+  const today = rioDayKey(now);
+  if (periods?.length) {
+    const exactToday = periods.find((p) => p.name === want && p.date === today);
+    if (exactToday) return exactToday;
+    const sameName = periods.find((p) => p.name === want && !p.date);
+    if (sameName) return sameName;
+  }
+  // Relógio manda: mesmo sem coluna no HTML, o “Hoje” é o período atual.
+  return {
+    name: want,
+    label: DAY_PERIOD_LABEL[want],
+    date: today,
+    dateHint: dateHintFromIso(today),
+  } as T;
+}
+
+type UpcomingPeriodBase = {
+  name: DayPeriodName;
+  label: string;
+  date?: string | null;
+  dateHint?: string | null;
+  sky: string | null;
+  precip: string | null;
+  wind: string | null;
+  tempTrend: null;
+  tempTrendLabel: null;
+};
+
+/**
+ * Próximas 24h = sempre os 3 períodos após o atual, com data.
+ * Preenche com o boletim 24h quando a coluna existir; senão deixa o slot
+ * (a UI pode completar com a Estendida do dia).
+ */
+export function upcomingPeriods<
+  T extends {
+    name: DayPeriodName;
+    label?: string;
+    date?: string | null;
+    dateHint?: string | null;
+    sky?: string | null;
+    precip?: string | null;
+    wind?: string | null;
+    tempTrend?: string | null;
+    tempTrendLabel?: string | null;
+  },
+>(
   periods: T[] | undefined,
   active: T | null = pickActivePeriod(periods),
-): T[] {
-  if (!periods?.length) return [];
-  if (!active) return periods.slice(1);
-  const idx = periods.findIndex(
-    (p) => p.name === active.name && (p.date ?? null) === (active.date ?? null),
-  );
-  if (idx < 0) return periods.filter((p) => p !== active);
-  return periods.slice(idx + 1);
+  now = new Date(),
+): Array<T | UpcomingPeriodBase> {
+  const baseName = active?.name ?? currentDayPeriod(now);
+  const baseDate = active?.date ?? rioDayKey(now);
+  const slots = nextThreePeriodSlots(baseName, baseDate);
+
+  return slots.map((slot) => {
+    const hit =
+      periods?.find((p) => p.name === slot.name && p.date === slot.date) ??
+      periods?.find((p) => p.name === slot.name && !p.date) ??
+      null;
+    if (hit) {
+      return {
+        ...hit,
+        label: hit.label ?? slot.label,
+        date: slot.date,
+        dateHint: slot.dateHint,
+      };
+    }
+    return {
+      name: slot.name,
+      label: slot.label,
+      date: slot.date,
+      dateHint: slot.dateHint,
+      sky: null,
+      precip: null,
+      wind: null,
+      tempTrend: null,
+      tempTrendLabel: null,
+    };
+  });
 }

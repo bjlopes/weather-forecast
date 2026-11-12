@@ -122,3 +122,20 @@ export function pickActivePeriod<T extends { name: DayPeriodName; date?: string 
   if (sameName) return sameName;
   return periods[0] ?? null;
 }
+
+/**
+ * Períodos seguintes ao atual no boletim rolante de 24h.
+ * Ex.: se agora é manhã → tarde, noite e madrugada.
+ */
+export function upcomingPeriods<T extends { name: DayPeriodName; date?: string | null }>(
+  periods: T[] | undefined,
+  active: T | null = pickActivePeriod(periods),
+): T[] {
+  if (!periods?.length) return [];
+  if (!active) return periods.slice(1);
+  const idx = periods.findIndex(
+    (p) => p.name === active.name && (p.date ?? null) === (active.date ?? null),
+  );
+  if (idx < 0) return periods.filter((p) => p !== active);
+  return periods.slice(idx + 1);
+}

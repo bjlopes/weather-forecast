@@ -14,6 +14,7 @@ import {
   forecastZoneForLatLon,
   pickActivePeriod,
   pickZoneTemp,
+  upcomingPeriods,
 } from "@/lib/alerta-rio/forecast-zone";
 import {
   weatherKindFromText,
@@ -239,6 +240,7 @@ export function ForecastTodayPanel({
 
   const periods = forecast.periods ?? [];
   const activePeriod = pickActivePeriod(periods);
+  const nextPeriods = upcomingPeriods(periods, activePeriod);
 
   const preferredZone = userLocation
     ? forecastZoneForLatLon(userLocation.lat, userLocation.lon)
@@ -280,7 +282,6 @@ export function ForecastTodayPanel({
             <h2 className="page-title text-slate-100">Hoje</h2>
             <p className="mt-1 text-[12px] text-slate-500 sm:text-[13px]">
               {sourceLabel}
-              {activePeriod ? ` · ${activePeriod.label}` : ""}
               {" · "}
               {formatPublished(forecast.publishedAt)}
             </p>
@@ -308,9 +309,14 @@ export function ForecastTodayPanel({
 
         {activePeriod ? (
           <div className="mt-4">
-            <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">
-              Agora · {activePeriod.label}
-            </p>
+            <h3 className="text-[17px] font-semibold tracking-tight text-slate-100">
+              {activePeriod.label}
+              {activePeriod.dateHint ? (
+                <span className="ml-2 text-[13px] font-normal text-slate-500">
+                  {activePeriod.dateHint}
+                </span>
+              ) : null}
+            </h3>
             <p className="mt-2 text-[15px] leading-relaxed text-slate-200">{periodText}</p>
           </div>
         ) : (
@@ -318,22 +324,26 @@ export function ForecastTodayPanel({
         )}
 
         {synoptic && (
-          <div className="mt-4">
-            <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">Sinótica</p>
-            <p className="mt-2 text-[15px] leading-relaxed whitespace-normal text-slate-300">
+          <div className="mt-5">
+            <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">
+              Previsão sinótica
+            </p>
+            <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-slate-300">
               {synoptic}
             </p>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-4 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-950/40 px-3 text-left text-sm font-medium text-slate-300 transition-colors active:bg-slate-800/50"
-        >
-          <span>{periods.length ? "Ver todos os períodos" : "Próximas 24 horas"}</span>
-          <ChevronRight className="size-4 shrink-0 text-slate-500" aria-hidden />
-        </button>
+        {(nextPeriods.length > 0 || detail24h) && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="mt-4 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-950/40 px-3 text-left text-sm font-medium text-slate-300 transition-colors active:bg-slate-800/50"
+          >
+            <span>Próximas 24 horas</span>
+            <ChevronRight className="size-4 shrink-0 text-slate-500" aria-hidden />
+          </button>
+        )}
 
         <a
           href={forecast.sourceUrl}
@@ -347,28 +357,24 @@ export function ForecastTodayPanel({
 
       <DetailSheet
         open={open}
-        title={periods.length ? "Períodos do dia" : "Próximas 24 horas"}
-        subtitle={`${sourceLabel} · ${formatPublished(forecast.publishedAt)}`}
+        title="Próximas 24 horas"
+        subtitle={
+          activePeriod
+            ? `Depois de ${activePeriod.label.toLowerCase()} · ${sourceLabel}`
+            : `${sourceLabel} · ${formatPublished(forecast.publishedAt)}`
+        }
         onClose={() => setOpen(false)}
       >
-        {periods.length ? (
+        {nextPeriods.length ? (
           <ul className="space-y-4">
-            {periods.map((period) => {
+            {nextPeriods.map((period) => {
               const text = periodSummary(period);
               const kind = weatherKindFromText(period.precip, period.sky, text);
               const meta = weatherMeta(kind);
-              const isActive =
-                period.name === activePeriod?.name &&
-                (period.date ?? null) === (activePeriod?.date ?? null);
               return (
                 <li
                   key={`${period.name}-${period.date ?? period.dateHint ?? ""}`}
-                  className={cn(
-                    "rounded-xl border px-3 py-3",
-                    isActive
-                      ? "border-brand-500/40 bg-brand-500/10"
-                      : "border-slate-700/50 bg-slate-950/40",
-                  )}
+                  className="rounded-xl border border-slate-700/50 bg-slate-950/40 px-3 py-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -377,11 +383,6 @@ export function ForecastTodayPanel({
                         {period.dateHint ? (
                           <span className="ml-1.5 text-[12px] font-normal text-slate-500">
                             {period.dateHint}
-                          </span>
-                        ) : null}
-                        {isActive ? (
-                          <span className="ml-2 text-[11px] font-medium text-brand-400 uppercase">
-                            agora
                           </span>
                         ) : null}
                       </p>

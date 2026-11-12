@@ -10,13 +10,17 @@ import {
   pickActivePeriod,
   type DayPeriodName,
 } from "./forecast-zone";
-import { fetchAlertaHtml } from "./alerta-html-fetch";
+import { fetchAlertaHtml, markdownTablesToHtml } from "./alerta-html-fetch";
 import type { AlertaRioDayForecast } from "./estendida-parse";
 
 export { pickActivePeriod, pickZoneTemp } from "./forecast-zone";
 
 export const PREVISAO_24H_URL =
   "https://alertario.rio.rj.gov.br/upload/Previsao.html";
+
+/** Host espelho histórico do Alerta Rio (às vezes passa quando o .rio.rj.gov.br está no WAF). */
+export const PREVISAO_24H_MIRROR_URL =
+  "https://www.sistema-alerta-rio.com.br/upload/Previsao.html";
 
 export const PREVISAO_24H_PAGE = "https://alertario.rio.rj.gov.br/24-horas/";
 export const PREVISAO_ESTENDIDA_PAGE = "https://alertario.rio.rj.gov.br/4-dias/";
@@ -155,8 +159,10 @@ export type Previsao24hParsed = AlertaRioDayForecast & {
 
 /**
  * Boletim oficial Previsao.html (próximas ~24h por períodos do dia).
+ * Aceita HTML de tabela ou markdown (via conversão).
  */
-export function parsePrevisao24hHtml(html: string): Previsao24hParsed | null {
+export function parsePrevisao24hHtml(raw: string): Previsao24hParsed | null {
+  const html = /<tr\b/i.test(raw) ? raw : markdownTablesToHtml(raw);
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
   if (!rows.length) return null;
 
@@ -414,6 +420,8 @@ export async function fetchPrevisao24h(): Promise<Previsao24hParsed | null> {
   for (const url of [
     PREVISAO_24H_URL,
     "https://alertario.rio.rj.gov.br/upload/Previsao.htm",
+    PREVISAO_24H_MIRROR_URL,
+    "https://sistema-alerta-rio.com.br/upload/Previsao.html",
   ]) {
     const html = await fetchAlertaHtml(url);
     if (!html) continue;

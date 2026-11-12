@@ -126,7 +126,8 @@ export async function getForecastBulletin(): Promise<ForecastBulletin> {
   }
 
   const fromCor = await fetchCorBulletin();
-  if (fromCor) {
+  // Só usa o COR se for o boletim de hoje — senão "Hoje" fica preso em dia antigo.
+  if (fromCor && rioDayKey(fromCor.publishedAt) === rioDayKey(new Date().toISOString())) {
     return enrichDaysFromAlertaRio(fromCor);
   }
 

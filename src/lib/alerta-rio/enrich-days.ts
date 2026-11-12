@@ -1,4 +1,5 @@
 import { polishProse } from "./forecast-parse";
+import { SAMPLE_FORECAST } from "./forecast-sample";
 import type { ForecastBulletin, ForecastDay, TempTrend } from "./forecast-types";
 import { fetchPrevisaoEstendida } from "./estendida-fetch";
 import type { AlertaRioDayForecast } from "./estendida-parse";
@@ -230,10 +231,23 @@ export async function enrichDaysFromAlertaRio(
       });
     }
   }
+  if (days.length) {
+    return {
+      ...bulletin,
+      days: days.slice(0, 4),
+      daysSource: bulletin.source === "sample" ? "sample" : "cor",
+    };
+  }
+
+  // Último recurso: amostra com dias futuros (evita painel "Próximos dias" vazio).
+  const sampleDays = SAMPLE_FORECAST.days.filter((day) => {
+    const keys = dateHintToIsos(day.dateHint, SAMPLE_FORECAST.publishedAt);
+    return keys.some((iso) => iso > today) || !keys.length;
+  });
   return {
     ...bulletin,
-    days: days.slice(0, 4),
-    daysSource: bulletin.source === "sample" ? "sample" : "cor",
+    days: sampleDays.slice(0, 4),
+    daysSource: "sample",
   };
 }
 

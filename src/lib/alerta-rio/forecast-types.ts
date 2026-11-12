@@ -1,3 +1,5 @@
+import type { DayPeriodName, ForecastTempZone } from "./forecast-zone";
+
 export type TempTrend = "declinio" | "estavel" | "elevacao";
 
 export interface ForecastDay {
@@ -16,6 +18,26 @@ export interface ForecastDay {
   corDetail: string | null;
 }
 
+export interface ForecastPeriod {
+  name: DayPeriodName;
+  label: string;
+  /** Data do período no boletim (YYYY-MM-DD), quando o HTML traz. */
+  date?: string | null;
+  /** Ex.: 12/11 — para UI. */
+  dateHint?: string | null;
+  sky: string | null;
+  precip: string | null;
+  wind: string | null;
+  tempTrend: TempTrend | null;
+  tempTrendLabel: string | null;
+}
+
+export interface ForecastZoneTemp {
+  zone: ForecastTempZone | string;
+  minTempC: number | null;
+  maxTempC: number | null;
+}
+
 export interface ForecastBulletin {
   fetchedAt: string;
   source: "live" | "sample";
@@ -24,7 +46,7 @@ export interface ForecastBulletin {
   publishedAt: string;
   /** Análise sinótica (sistemas meteorológicos). */
   synoptic: string;
-  /** Previsão detalhada para as próximas ~24h. */
+  /** Previsão detalhada para as próximas ~24h (todos os períodos). */
   detail24h: string;
   minTempC: number | null;
   maxTempC: number | null;
@@ -35,4 +57,8 @@ export interface ForecastBulletin {
   days: ForecastDay[];
   /** Origem dos cards de próximos dias (debug / UI). */
   daysSource?: "estendida" | "cor" | "sample";
+  /** Períodos do boletim Alerta Rio 24h (madrugada→noite). */
+  periods?: ForecastPeriod[];
+  /** Temperaturas mín/máx por zona do boletim 24h. */
+  zoneTemps?: ForecastZoneTemp[];
 }

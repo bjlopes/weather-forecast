@@ -277,7 +277,7 @@ export function AlertaRioDashboard() {
           </div>
         </nav>
 
-        <ForecastTodayPanel forecast={forecast} />
+        <ForecastTodayPanel forecast={forecast} userLocation={userLocation} />
         <ForecastDaysPanel forecast={forecast} />
         <RadarPanel refreshToken={radarRefreshToken} />
         <NearbyStationsPanel

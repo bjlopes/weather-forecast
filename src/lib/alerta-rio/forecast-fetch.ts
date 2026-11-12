@@ -56,10 +56,6 @@ function hasTemperatureInfo(b: ForecastBulletin): boolean {
   );
 }
 
-function isStaleForToday(publishedAt: string, now = new Date()): boolean {
-  return rioDayKey(publishedAt) < rioDayKey(now.toISOString());
-}
-
 async function fetchCorBulletin(): Promise<ForecastBulletin | null> {
   try {
     const res = await fetch(COR_POSTS_URL, {
@@ -107,10 +103,10 @@ async function fetchCorBulletin(): Promise<ForecastBulletin | null> {
 
 async function fetchAlertaTodayBulletin(): Promise<ForecastBulletin | null> {
   try {
+    // Fonte canônica do "Hoje": Previsao.html (24-horas) com períodos + zonas.
     const day24 = await fetchPrevisao24h();
     if (day24) return bulletinFromPrevisao24h(day24);
 
-    // Previsao.html costuma estar no WAF; Estendida (Node) ainda libera no Vercel.
     const extended = await fetchPrevisaoEstendida();
     if (!extended.length) return null;
     const today = rioDayKey(new Date().toISOString());
@@ -123,16 +119,13 @@ async function fetchAlertaTodayBulletin(): Promise<ForecastBulletin | null> {
 }
 
 export async function getForecastBulletin(): Promise<ForecastBulletin> {
-  const fromCor = await fetchCorBulletin();
-  if (fromCor && !isStaleForToday(fromCor.publishedAt)) {
-    return enrichDaysFromAlertaRio(fromCor);
-  }
-
+  // Prioriza o boletim 24h do Alerta Rio (períodos + sinótica + temps por zona).
   const fromAlerta = await fetchAlertaTodayBulletin();
   if (fromAlerta) {
     return enrichDaysFromAlertaRio(fromAlerta);
   }
 
+  const fromCor = await fetchCorBulletin();
   if (fromCor) {
     return enrichDaysFromAlertaRio(fromCor);
   }

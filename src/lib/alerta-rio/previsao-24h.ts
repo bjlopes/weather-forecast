@@ -1,7 +1,19 @@
 import { polishProse } from "./forecast-parse";
-import type { ForecastBulletin, TempTrend } from "./forecast-types";
+import type {
+  ForecastBulletin,
+  ForecastPeriod,
+  ForecastZoneTemp,
+  TempTrend,
+} from "./forecast-types";
+import {
+  DAY_PERIOD_LABEL,
+  pickActivePeriod,
+  type DayPeriodName,
+} from "./forecast-zone";
 import { fetchAlertaHtml } from "./alerta-html-fetch";
 import type { AlertaRioDayForecast } from "./estendida-parse";
+
+export { pickActivePeriod, pickZoneTemp } from "./forecast-zone";
 
 export const PREVISAO_24H_URL =
   "https://alertario.rio.rj.gov.br/upload/Previsao.html";
@@ -33,12 +45,6 @@ function pickTrend(values: string[]): { trend: TempTrend | null; label: string |
   return strong ?? parsed[0] ?? { trend: null, label: null };
 }
 
-function pickPeriodValue(values: string[], preferIndex = 1): string | null {
-  const clean = values.map((v) => v.trim()).filter(Boolean);
-  if (!clean.length) return null;
-  return clean[Math.min(preferIndex, clean.length - 1)] ?? clean[0] ?? null;
-}
-
 function brDateToIso(dmy: string): string | null {
   const m = dmy.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!m) return null;
@@ -51,7 +57,49 @@ function cellTexts(rowHtml: string): string[] {
   );
 }
 
-const PERIODS = ["madrugada", "manhã", "tarde", "noite"] as const;
+function normalizePeriodName(raw: string): DayPeriodName | null {
+  const t = raw.toLowerCase().normalize("NFC");
+  if (t.includes("madrugada")) return "madrugada";
+  if (t.includes("manh")) return "manhã";
+  if (t.includes("tarde")) return "tarde";
+  if (t.includes("noite")) return "noite";
+  return null;
+}
+
+function dateHintFromIso(iso: string | null): string | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return `${Number(m[3])}/${Number(m[2])}`;
+}
+
+/** Lê colunas do cabeçalho rolante: Manhã 12/11/2026 | … | Madrugada 13/11/2026 */
+function parsePeriodHeaders(headerRowHtml: string): Array<{
+  name: DayPeriodName;
+  label: string;
+  date: string | null;
+  dateHint: string | null;
+}> {
+  const cells = cellTexts(headerRowHtml).slice(1); // 1ª célula costuma ser rótulo vazio
+  const out: Array<{
+    name: DayPeriodName;
+    label: string;
+    date: string | null;
+    dateHint: string | null;
+  }> = [];
+  for (const cell of cells) {
+    const name = normalizePeriodName(cell);
+    if (!name) continue;
+    const iso = brDateToIso(cell.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)?.[1] ?? "");
+    out.push({
+      name,
+      label: DAY_PERIOD_LABEL[name],
+      date: iso,
+      dateHint: dateHintFromIso(iso),
+    });
+  }
+  return out;
+}
 
 function weekdayFullLabel(short: string | null, iso: string): string {
   if (short) {
@@ -82,14 +130,26 @@ function weekdayFullLabel(short: string | null, iso: string): string {
   }
 }
 
+function parseMaxMinCell(raw: string): { min: number | null; max: number | null } {
+  const max =
+    raw.match(/m[aá]x\.?\s*:?\s*(\d{1,2})\s*°?\s*C/i)?.[1] ??
+    raw.match(/m[aá]xima\s*:?\s*(\d{1,2})/i)?.[1];
+  const min =
+    raw.match(/m[ií]n\.?\s*:?\s*(\d{1,2})\s*°?\s*C/i)?.[1] ??
+    raw.match(/m[ií]nima\s*:?\s*(\d{1,2})/i)?.[1];
+  return {
+    min: min != null ? Number(min) : null,
+    max: max != null ? Number(max) : null,
+  };
+}
+
+function normalizeZoneName(raw: string): string {
+  return polishProse(raw).replace(/\s+/g, " ").trim();
+}
+
 export type Previsao24hParsed = AlertaRioDayForecast & {
-  periods: Array<{
-    name: (typeof PERIODS)[number];
-    sky: string | null;
-    precip: string | null;
-    wind: string | null;
-    trend: string | null;
-  }>;
+  periods: ForecastPeriod[];
+  zoneTemps: ForecastZoneTemp[];
   synopticNote: string | null;
 };
 
@@ -104,9 +164,12 @@ export function parsePrevisao24hHtml(html: string): Previsao24hParsed | null {
     rows.find(
       (r) => /madrugada|manh[ãa]|tarde|noite/i.test(r) && /\d{1,2}\/\d{1,2}\/\d{4}/.test(r),
     ) ?? "";
+  const periodHeaders = parsePeriodHeaders(headerRow);
   const headerText = stripTags(headerRow);
-  const iso = brDateToIso(headerText.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)?.[1] ?? "");
-  if (!iso) return null;
+  const iso =
+    periodHeaders.find((p) => p.date)?.date ??
+    brDateToIso(headerText.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)?.[1] ?? "");
+  if (!iso || !periodHeaders.length) return null;
 
   const weekday =
     headerText.match(/\b(Seg|Ter|Qua|Qui|Sex|S[aá]b|Dom)\b/i)?.[1] ?? null;
@@ -116,8 +179,9 @@ export function parsePrevisao24hHtml(html: string): Previsao24hParsed | null {
     const texts = cellTexts(row);
     if (texts.length < 2) continue;
     const label = texts[0].toLowerCase();
-    const values = texts.slice(1).filter(Boolean);
-    if (!values.length) continue;
+    // Mantém o alinhamento por índice de coluna (inclui células vazias).
+    const values = texts.slice(1);
+    if (!values.some(Boolean)) continue;
     if (label.startsWith("céu") || label.startsWith("ceu")) byLabel.set("sky", values);
     else if (label.startsWith("precip")) byLabel.set("precip", values);
     else if (label.startsWith("vento")) byLabel.set("wind", values);
@@ -126,51 +190,114 @@ export function parsePrevisao24hHtml(html: string): Previsao24hParsed | null {
     }
   }
 
-  const zoneTemps = [
-    ...html.matchAll(
-      /m[aá]x\.?\s*:?\s*(\d{1,2})\s*°?\s*C[^\d]{0,20}m[ií]n\.?\s*:?\s*(\d{1,2})\s*°?\s*C/gi,
-    ),
-  ];
-  let maxTempC: number | null = null;
-  let minTempC: number | null = null;
-  for (const m of zoneTemps) {
-    const max = Number(m[1]);
-    const min = Number(m[2]);
-    if (Number.isFinite(max)) maxTempC = maxTempC == null ? max : Math.max(maxTempC, max);
-    if (Number.isFinite(min)) minTempC = minTempC == null ? min : Math.min(minTempC, min);
+  // Zonas + temps: linha de nomes seguida da linha Máx./Mín.
+  const zoneTemps: ForecastZoneTemp[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    const names = cellTexts(rows[i]);
+    const values = cellTexts(rows[i + 1]);
+    if (
+      names.length >= 3 &&
+      values.length >= 3 &&
+      names.every((n) => /barra|centro|tijuca|norte|oeste|sul|zona/i.test(n)) &&
+      values.every((v) => /m[aá]x|m[ií]n/i.test(v))
+    ) {
+      const n = Math.min(names.length, values.length);
+      for (let j = 0; j < n; j++) {
+        const mm = parseMaxMinCell(values[j]);
+        zoneTemps.push({
+          zone: normalizeZoneName(names[j]),
+          minTempC: mm.min,
+          maxTempC: mm.max,
+        });
+      }
+      break;
+    }
+  }
+
+  // Fallback: agrega min/max da cidade se a linha de zonas não veio estruturada.
+  if (!zoneTemps.length) {
+    const zoneHits = [
+      ...html.matchAll(
+        /m[aá]x\.?\s*:?\s*(\d{1,2})\s*°?\s*C[^\d]{0,20}m[ií]n\.?\s*:?\s*(\d{1,2})\s*°?\s*C/gi,
+      ),
+    ];
+    let maxTempC: number | null = null;
+    let minTempC: number | null = null;
+    for (const m of zoneHits) {
+      const max = Number(m[1]);
+      const min = Number(m[2]);
+      if (Number.isFinite(max)) maxTempC = maxTempC == null ? max : Math.max(maxTempC, max);
+      if (Number.isFinite(min)) minTempC = minTempC == null ? min : Math.min(minTempC, min);
+    }
+    if (minTempC != null || maxTempC != null) {
+      zoneTemps.push({ zone: "Rio de Janeiro", minTempC, maxTempC });
+    }
   }
 
   const skyVals = byLabel.get("sky") ?? [];
   const precipVals = byLabel.get("precip") ?? [];
   const windVals = byLabel.get("wind") ?? [];
   const trendVals = byLabel.get("trend") ?? [];
-  const trendInfo = pickTrend(trendVals);
 
-  const periods = PERIODS.map((name, i) => ({
-    name,
-    sky: skyVals[i]?.trim() || null,
-    precip: precipVals[i]?.trim() || null,
-    wind: windVals[i]?.trim() || null,
-    trend: trendVals[i]?.trim() || null,
-  }));
+  const periods: ForecastPeriod[] = periodHeaders.map((header, i) => {
+    const trendInfo = parseTrend(trendVals[i] ?? "");
+    return {
+      name: header.name,
+      label: header.label,
+      date: header.date,
+      dateHint: header.dateHint,
+      sky: skyVals[i]?.trim() || null,
+      precip: precipVals[i]?.trim() || null,
+      wind: windVals[i]?.trim() || null,
+      tempTrend: trendInfo.trend,
+      tempTrendLabel: trendInfo.label,
+    };
+  });
 
-  const synopticMatch = html.match(
-    /descri[cç][aã]o\s+sin[oó]tica[\s\S]{0,80}?<td\b[^>]*>([\s\S]*?)<\/td>/i,
-  );
-  const synopticNote = synopticMatch ? polishProse(stripTags(synopticMatch[1])) : null;
+  let synopticNote: string | null = null;
+  const synopticRe = /(descri[cç][aã]o|previs[aã]o)\s+sin[oó]tica/i;
+  const synopticHeaderIdx = rows.findIndex((r) => synopticRe.test(stripTags(r)));
+  if (synopticHeaderIdx >= 0) {
+    const headerTextOnly = stripTags(rows[synopticHeaderIdx]);
+    // Às vezes o texto já vem na mesma célula; senão, na linha seguinte.
+    const sameCellBody = headerTextOnly
+      .replace(/^.*?(descri[cç][aã]o|previs[aã]o)\s+sin[oó]tica[^\d]*\d{0,2}\/?\d{0,2}\/?\d{0,4}\s*/i, "")
+      .trim();
+    const nextRow = rows[synopticHeaderIdx + 1] ? stripTags(rows[synopticHeaderIdx + 1]) : "";
+    const candidate =
+      sameCellBody.length > 40
+        ? sameCellBody
+        : nextRow && !synopticRe.test(nextRow)
+          ? nextRow
+          : "";
+    if (candidate) synopticNote = polishProse(candidate);
+  }
+
+  const cityMin = zoneTemps.reduce<number | null>((acc, z) => {
+    if (z.minTempC == null) return acc;
+    return acc == null ? z.minTempC : Math.min(acc, z.minTempC);
+  }, null);
+  const cityMax = zoneTemps.reduce<number | null>((acc, z) => {
+    if (z.maxTempC == null) return acc;
+    return acc == null ? z.maxTempC : Math.max(acc, z.maxTempC);
+  }, null);
+
+  const active = pickActivePeriod(periods);
+  const dayTrend = pickTrend(trendVals);
 
   return {
     date: iso,
     weekdayShort: weekday,
     iconFile: null,
-    sky: pickPeriodValue(skyVals, 1),
-    precip: pickPeriodValue(precipVals, 1),
-    wind: pickPeriodValue(windVals, 1),
-    tempTrend: trendInfo.trend,
-    tempTrendLabel: trendInfo.label,
-    minTempC,
-    maxTempC,
+    sky: active?.sky ?? null,
+    precip: active?.precip ?? null,
+    wind: active?.wind ?? null,
+    tempTrend: active?.tempTrend ?? dayTrend.trend,
+    tempTrendLabel: active?.tempTrendLabel ?? dayTrend.label,
+    minTempC: cityMin,
+    maxTempC: cityMax,
     periods,
+    zoneTemps,
     synopticNote: synopticNote || null,
   };
 }
@@ -187,25 +314,8 @@ function detailFromPeriods(day: Previsao24hParsed): string {
       return `Na ${p.name}, ${parts.join(", ")}`;
     })
     .filter(Boolean);
-  const tempBits = [
-    day.tempTrendLabel
-      ? `as temperaturas apresentam ${day.tempTrendLabel.toLowerCase()}`
-      : null,
-    day.minTempC != null || day.maxTempC != null
-      ? `com ${[
-          day.minTempC != null ? `mínima prevista de ${day.minTempC}°C` : null,
-          day.maxTempC != null ? `máxima de ${day.maxTempC}°C` : null,
-        ]
-          .filter(Boolean)
-          .join(" e ")}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
 
-  return polishProse([bits.join(". "), tempBits ? `No geral, ${tempBits}` : null]
-    .filter(Boolean)
-    .join(". "));
+  return polishProse(bits.join(". "));
 }
 
 function bulletinFromAlertaDay(
@@ -213,6 +323,9 @@ function bulletinFromAlertaDay(
   opts: {
     sourceUrl: string;
     detail24h?: string;
+    synoptic?: string | null;
+    periods?: ForecastPeriod[];
+    zoneTemps?: ForecastZoneTemp[];
   },
 ): ForecastBulletin {
   const [, month, dayNum] = day.date.split("-");
@@ -227,15 +340,18 @@ function bulletinFromAlertaDay(
     day.maxTempC != null ? `temperatura máxima prevista de ${day.maxTempC}°C` : null,
   ].filter(Boolean);
 
-  const synoptic = polishProse(
-    [
-      `Previsão oficial do Sistema Alerta Rio para ${label.toLowerCase()} (${dateHint})`,
-      sky ? `com céu ${sky.toLowerCase()}` : null,
-      rain ? `e ${rain.toLowerCase()}` : null,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
+  const synoptic =
+    opts.synoptic && opts.synoptic.length > 20
+      ? opts.synoptic
+      : polishProse(
+          [
+            `Previsão oficial do Sistema Alerta Rio para ${label.toLowerCase()} (${dateHint})`,
+            sky ? `com céu ${sky.toLowerCase()}` : null,
+            rain ? `e ${rain.toLowerCase()}` : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
 
   const detail24h =
     opts.detail24h ??
@@ -273,6 +389,8 @@ function bulletinFromAlertaDay(
     tempTrend: day.tempTrend,
     tempTrendLabel: day.tempTrendLabel,
     days: [],
+    periods: opts.periods,
+    zoneTemps: opts.zoneTemps,
   };
 }
 
@@ -281,6 +399,9 @@ export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulleti
   return bulletinFromAlertaDay(day, {
     sourceUrl: PREVISAO_24H_PAGE,
     detail24h: detailFromPeriods(day),
+    synoptic: day.synopticNote,
+    periods: day.periods,
+    zoneTemps: day.zoneTemps,
   });
 }
 

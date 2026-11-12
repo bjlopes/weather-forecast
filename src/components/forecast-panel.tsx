@@ -3,14 +3,25 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, X } from "lucide-react";
-import type { ForecastBulletin, ForecastDay, TempTrend } from "@/lib/alerta-rio/forecast-types";
+import type {
+  ForecastBulletin,
+  ForecastDay,
+  ForecastPeriod,
+  TempTrend,
+} from "@/lib/alerta-rio/forecast-types";
 import { polishProse } from "@/lib/alerta-rio/forecast-parse";
+import {
+  forecastZoneForLatLon,
+  pickActivePeriod,
+  pickZoneTemp,
+} from "@/lib/alerta-rio/forecast-zone";
 import {
   weatherKindFromText,
   weatherMeta,
   WeatherGlyph,
   type WeatherKind,
 } from "@/lib/alerta-rio/weather-icon";
+import type { UserLocation } from "@/hooks/use-user-location";
 import { cn } from "@/lib/utils";
 
 const emptySubscribe = () => () => {};
@@ -194,12 +205,26 @@ function DetailSheet({
   );
 }
 
-/** Sinótica sempre completa; toque abre detalhe das próximas 24h. */
+function periodSummary(period: ForecastPeriod): string {
+  return polishProse(
+    [
+      period.sky ? `Céu ${period.sky.toLowerCase()}` : null,
+      period.precip,
+      period.wind ? `Ventos ${period.wind.toLowerCase()}` : null,
+    ]
+      .filter(Boolean)
+      .join(". "),
+  );
+}
+
+/** Sinótica sempre completa; destaca o período atual do boletim 24h. */
 export function ForecastTodayPanel({
   forecast,
+  userLocation = null,
   className,
 }: {
   forecast: ForecastBulletin | null;
+  userLocation?: UserLocation | null;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -212,10 +237,27 @@ export function ForecastTodayPanel({
     );
   }
 
+  const periods = forecast.periods ?? [];
+  const activePeriod = pickActivePeriod(periods);
+
+  const preferredZone = userLocation
+    ? forecastZoneForLatLon(userLocation.lat, userLocation.lon)
+    : null;
+  const zoneTemp = pickZoneTemp(forecast.zoneTemps, preferredZone);
+  const minTempC = zoneTemp?.minTempC ?? forecast.minTempC;
+  const maxTempC = zoneTemp?.maxTempC ?? forecast.maxTempC;
+  const tempTrend = activePeriod?.tempTrend ?? forecast.tempTrend;
+
   const title = polishProse(forecast.title);
   const synoptic = polishProse(forecast.synoptic);
   const detail24h = polishProse(forecast.detail24h);
-  const todayKind = weatherKindFromText(title, detail24h, synoptic);
+  const periodText = activePeriod ? periodSummary(activePeriod) : detail24h;
+  const todayKind = weatherKindFromText(
+    activePeriod?.precip,
+    activePeriod?.sky,
+    periodText,
+    title,
+  );
   const todayMeta = weatherMeta(todayKind);
   const fromAlerta =
     forecast.source === "live" && /alertario\.rio/i.test(forecast.sourceUrl);
@@ -237,7 +279,10 @@ export function ForecastTodayPanel({
           <div className="min-w-0 flex-1">
             <h2 className="page-title text-slate-100">Hoje</h2>
             <p className="mt-1 text-[12px] text-slate-500 sm:text-[13px]">
-              {sourceLabel} · {formatPublished(forecast.publishedAt)}
+              {sourceLabel}
+              {activePeriod ? ` · ${activePeriod.label}` : ""}
+              {" · "}
+              {formatPublished(forecast.publishedAt)}
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -250,26 +295,43 @@ export function ForecastTodayPanel({
 
         <TempChip
           className="mt-3"
-          minTempC={forecast.minTempC}
-          maxTempC={forecast.maxTempC}
-          tempTrend={forecast.tempTrend}
+          minTempC={minTempC}
+          maxTempC={maxTempC}
+          tempTrend={tempTrend}
         />
-
-        <h3 className="mt-3 text-[15px] leading-snug font-medium text-slate-200">{title}</h3>
-
-        <div className="mt-4">
-          <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">Sinótica</p>
-          <p className="mt-2 text-[15px] leading-relaxed whitespace-normal text-slate-300">
-            {synoptic}
+        {zoneTemp && (
+          <p className="mt-1 text-[12px] text-slate-500">
+            {zoneTemp.zone}
+            {preferredZone ? "" : " · referência"}
           </p>
-        </div>
+        )}
+
+        {activePeriod ? (
+          <div className="mt-4">
+            <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">
+              Agora · {activePeriod.label}
+            </p>
+            <p className="mt-2 text-[15px] leading-relaxed text-slate-200">{periodText}</p>
+          </div>
+        ) : (
+          <h3 className="mt-3 text-[15px] leading-snug font-medium text-slate-200">{title}</h3>
+        )}
+
+        {synoptic && (
+          <div className="mt-4">
+            <p className="text-[11px] font-medium tracking-wide text-brand-400 uppercase">Sinótica</p>
+            <p className="mt-2 text-[15px] leading-relaxed whitespace-normal text-slate-300">
+              {synoptic}
+            </p>
+          </div>
+        )}
 
         <button
           type="button"
           onClick={() => setOpen(true)}
           className="mt-4 flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-950/40 px-3 text-left text-sm font-medium text-slate-300 transition-colors active:bg-slate-800/50"
         >
-          <span>Próximas 24 horas</span>
+          <span>{periods.length ? "Ver todos os períodos" : "Próximas 24 horas"}</span>
           <ChevronRight className="size-4 shrink-0 text-slate-500" aria-hidden />
         </button>
 
@@ -285,24 +347,96 @@ export function ForecastTodayPanel({
 
       <DetailSheet
         open={open}
-        title="Próximas 24 horas"
+        title={periods.length ? "Períodos do dia" : "Próximas 24 horas"}
         subtitle={`${sourceLabel} · ${formatPublished(forecast.publishedAt)}`}
         onClose={() => setOpen(false)}
       >
-        <div className="mb-4 flex items-center gap-3">
-          <WeatherGlyph kind={todayKind} size="lg" />
-          <div className="min-w-0">
-            <p className="font-semibold text-slate-100">{todayMeta.label}</p>
-            <TempChip
-              className="mt-1"
-              minTempC={forecast.minTempC}
-              maxTempC={forecast.maxTempC}
-              tempTrend={forecast.tempTrend}
-            />
-          </div>
-        </div>
+        {periods.length ? (
+          <ul className="space-y-4">
+            {periods.map((period) => {
+              const text = periodSummary(period);
+              const kind = weatherKindFromText(period.precip, period.sky, text);
+              const meta = weatherMeta(kind);
+              const isActive =
+                period.name === activePeriod?.name &&
+                (period.date ?? null) === (activePeriod?.date ?? null);
+              return (
+                <li
+                  key={`${period.name}-${period.date ?? period.dateHint ?? ""}`}
+                  className={cn(
+                    "rounded-xl border px-3 py-3",
+                    isActive
+                      ? "border-brand-500/40 bg-brand-500/10"
+                      : "border-slate-700/50 bg-slate-950/40",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-100">
+                        {period.label}
+                        {period.dateHint ? (
+                          <span className="ml-1.5 text-[12px] font-normal text-slate-500">
+                            {period.dateHint}
+                          </span>
+                        ) : null}
+                        {isActive ? (
+                          <span className="ml-2 text-[11px] font-medium text-brand-400 uppercase">
+                            agora
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="mt-1 text-[13px] text-slate-400">{meta.label}</p>
+                    </div>
+                    <WeatherGlyph kind={kind} size="sm" />
+                  </div>
+                  <p className="mt-2 text-[14px] leading-relaxed text-slate-300">{text}</p>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <>
+            <div className="mb-4 flex items-center gap-3">
+              <WeatherGlyph kind={todayKind} size="lg" />
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-100">{todayMeta.label}</p>
+                <TempChip
+                  className="mt-1"
+                  minTempC={minTempC}
+                  maxTempC={maxTempC}
+                  tempTrend={tempTrend}
+                />
+              </div>
+            </div>
+            <p className="text-[15px] leading-relaxed text-slate-300">{detail24h}</p>
+          </>
+        )}
 
-        <p className="text-[15px] leading-relaxed text-slate-300">{detail24h}</p>
+        {forecast.zoneTemps && forecast.zoneTemps.length > 0 && (
+          <div className="mt-5 border-t border-slate-700/50 pt-4">
+            <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+              Temperaturas por região
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {forecast.zoneTemps.map((z) => (
+                <li
+                  key={z.zone}
+                  className={cn(
+                    "flex items-center justify-between gap-3 text-sm",
+                    zoneTemp?.zone === z.zone ? "text-brand-400" : "text-slate-300",
+                  )}
+                >
+                  <span>{z.zone}</span>
+                  <span className="tabular-nums">
+                    {z.minTempC != null ? `${z.minTempC}°` : "—"}
+                    {" / "}
+                    {z.maxTempC != null ? `${z.maxTempC}°` : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </DetailSheet>
     </>
   );

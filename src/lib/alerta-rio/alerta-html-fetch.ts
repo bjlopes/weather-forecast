@@ -6,8 +6,11 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** Mesmo UA do TempoReal. */
-const USER_AGENT = "Mozilla/5.0 (compatible; WeatherForecast/1.0)";
+/** UA de browser — o WAF municipal costuma rejeitar bots curtos. */
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+const DEFAULT_REFERER = "https://alertario.rio.rj.gov.br/24-horas/";
 
 export function isUsableAlertaHtml(html: string | null | undefined): html is string {
   if (!html) return false;
@@ -31,9 +34,11 @@ async function curlAlertaHtml(url: string): Promise<string | null> {
         "-A",
         USER_AGENT,
         "-H",
-        "Accept: text/html,application/xhtml+xml",
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "-H",
         "Accept-Language: pt-BR,pt;q=0.9",
+        "-H",
+        `Referer: ${DEFAULT_REFERER}`,
         "-o",
         bodyPath,
         "-w",
@@ -61,9 +66,10 @@ async function nodeFetchAlertaHtml(url: string): Promise<string | null> {
       cache: "no-store",
       redirect: "follow",
       headers: {
-        Accept: "text/html,application/xhtml+xml",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pt-BR,pt;q=0.9",
         "User-Agent": USER_AGENT,
+        Referer: DEFAULT_REFERER,
       },
     });
     if (!res.ok) return null;
@@ -92,6 +98,7 @@ async function jinaFetchAlertaHtml(url: string): Promise<string | null> {
         Accept: "text/html,application/xhtml+xml",
         "User-Agent": USER_AGENT,
         "X-Return-Format": "html",
+        Referer: DEFAULT_REFERER,
       },
     });
     if (!res.ok) return null;
@@ -108,10 +115,7 @@ async function jinaFetchAlertaHtml(url: string): Promise<string | null> {
  * Node direto → curl → proxy Jina (HTML).
  * TempoReal costuma passar no Node; Estendida oscila e cai no Jina.
  */
-export async function fetchAlertaHtml(
-  url: string,
-  _referer?: string,
-): Promise<string | null> {
+export async function fetchAlertaHtml(url: string): Promise<string | null> {
   const viaNode = await nodeFetchAlertaHtml(url);
   if (viaNode) return viaNode;
   const viaCurl = await curlAlertaHtml(url);

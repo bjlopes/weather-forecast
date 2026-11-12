@@ -1,76 +1,87 @@
 import type { ForecastBulletin } from "./forecast-types";
 
-/** Amostra alinhada à Estendida (4 dias à frente — Ter→Sex). */
+/**
+ * Amostra alinhada ao boletim 24h (quando live + cache falham).
+ * Mantém períodos / zonas / sinótica para o cartão Hoje não ficar vazio.
+ */
 export const SAMPLE_FORECAST: ForecastBulletin = {
-  fetchedAt: "2026-11-09T12:00:00.000Z",
+  fetchedAt: "2026-11-12T12:00:00.000Z",
   source: "sample",
-  sourceUrl:
-    "https://cor.rio/segunda-feira-09-11-com-previsao-de-chuva-fraca-a-moderada-e-temperatura-maxima-prevista-de-23oc/",
+  sourceUrl: "https://alertario.rio.rj.gov.br/24-horas/",
   title:
-    "Segunda-feira (09/11) com chuva fraca a moderada e temperatura máxima prevista de 23ºC.",
-  publishedAt: "2026-11-09T06:30:54",
+    "Quinta-feira (12/11) com pancadas de chuva isoladas e temperatura máxima prevista de 34°C.",
+  publishedAt: "2026-11-12T12:00:00-03:00",
   synoptic:
-    "Nesta segunda-feira (09/11), o tempo permanece instável na cidade do Rio devido à entrada de ventos úmidos do oceano.",
+    "Nesta quinta-feira, áreas de instabilidade associadas à formação de uma região de baixa pressão deixarão o tempo instável na cidade do Rio, com previsão de nebulosidade variada e pancadas de chuva isoladas a partir da tarde, podendo vir acompanhadas de raios. Os ventos estarão predominantemente moderados ao longo do dia e as temperaturas se manterão estáveis, com mínima prevista de 18°C e máxima de 34°C.",
   detail24h:
-    "A previsão é de predomínio de céu encoberto e chuva fraca a moderada isolada no período da manhã, passando a chuva fraca isolada a partir da tarde. Os ventos estarão fracos a moderados e as temperaturas apresentarão declínio, com mínima prevista de 16°C e máxima de 23°C.",
-  minTempC: 16,
-  maxTempC: 23,
-  tempTrend: "declinio",
-  tempTrendLabel: "Declínio",
-  days: [
+    "Na manhã, céu nublado a parcialmente nublado, sem chuva, ventos moderado de N/NE. Na tarde, céu nublado a parcialmente nublado, pancadas de chuva isoladas, ventos moderado de NE/E. Na noite, céu parcialmente nublado a nublado, pancadas de chuva isoladas. Na madrugada, céu parcialmente nublado a nublado, pancadas de chuva isoladas.",
+  minTempC: 18,
+  maxTempC: 34,
+  tempTrend: "estavel",
+  tempTrendLabel: "Estável",
+  periods: [
     {
-      label: "Terça-feira",
-      dateHint: "10/11",
-      summary:
-        "Céu nublado. Chuvisco/chuva fraca isolada durante a madrugada/manhã. Ventos moderado de E/SE.",
-      rainHint: "Chuvisco/Chuva Fraca isolada",
-      windHint: "Moderado de E/SE",
-      minTempC: 16,
-      maxTempC: 26,
-      tempTrend: "elevacao",
-      iconUrl: null,
-      skyHint: "Nublado",
-      corDetail:
-        "O tempo permanece instável devido à entrada de ventos úmidos do oceano. Assim, a previsão é de céu nublado e chuvisco/chuva fraca isolada na madrugada/manhã. Os ventos estarão fracos a moderados.",
-    },
-    {
-      label: "Quarta-feira",
-      dateHint: "11/11",
-      summary:
-        "Céu nublado a parcialmente nublado. Chuvisco/chuva fraca isolada durante a tarde/noite. Ventos moderado de E/SE.",
-      rainHint: "Chuvisco/Chuva Fraca isolada",
-      windHint: "Moderado de E/SE",
-      minTempC: 16,
-      maxTempC: 28,
-      tempTrend: "estavel",
-      iconUrl: null,
-      skyHint: "Nublado a Parcialmente Nublado",
-      corDetail:
-        "Ventos úmidos associados do oceano seguem influenciando o tempo, com céu nublado a parcialmente nublado e previsão de chuvisco/chuva fraca isolada entre a tarde/noite. Os ventos estarão moderados durante a tarde/noite.",
-    },
-    {
-      label: "Quinta-feira",
+      name: "manhã",
+      label: "Manhã",
+      date: "2026-11-12",
       dateHint: "12/11",
-      summary:
-        "Céu parcialmente nublado a nublado. Chuva fraca a moderada isolada a partir da tarde. Ventos fraco a moderado de E/SE.",
-      rainHint: "Chuva fraca a moderada isolada",
-      windHint: "Fraco a Moderado de E/SE",
-      minTempC: 17,
-      maxTempC: 30,
+      sky: "Nublado a Parcialmente Nublado",
+      precip: "Sem chuva",
+      wind: "Moderado de N/NE",
       tempTrend: "estavel",
-      iconUrl: null,
-      skyHint: "Parcialmente Nublado a Nublado",
-      corDetail: null,
+      tempTrendLabel: "Estável",
     },
+    {
+      name: "tarde",
+      label: "Tarde",
+      date: "2026-11-12",
+      dateHint: "12/11",
+      sky: "Nublado a Parcialmente Nublado",
+      precip: "Pancadas de chuva isoladas",
+      wind: "Moderado de NE/E",
+      tempTrend: "estavel",
+      tempTrendLabel: "Estável",
+    },
+    {
+      name: "noite",
+      label: "Noite",
+      date: "2026-11-12",
+      dateHint: "12/11",
+      sky: "Parcialmente Nublado a Nublado",
+      precip: "Pancadas de chuva isoladas",
+      wind: "Moderado de NE/E",
+      tempTrend: "estavel",
+      tempTrendLabel: "Estável",
+    },
+    {
+      name: "madrugada",
+      label: "Madrugada",
+      date: "2026-11-13",
+      dateHint: "13/11",
+      sky: "Parcialmente Nublado a Nublado",
+      precip: "Pancadas de chuva isoladas",
+      wind: "Fraco a Moderado de SW/W",
+      tempTrend: "estavel",
+      tempTrendLabel: "Estável",
+    },
+  ],
+  zoneTemps: [
+    { zone: "Barra/Jacarepaguá", minTempC: 19, maxTempC: 33 },
+    { zone: "Centro/Grande Tijuca", minTempC: 18, maxTempC: 32 },
+    { zone: "Zona Norte", minTempC: 20, maxTempC: 34 },
+    { zone: "Zona Oeste", minTempC: 19, maxTempC: 34 },
+    { zone: "Zona Sul", minTempC: 21, maxTempC: 30 },
+  ],
+  days: [
     {
       label: "Sexta-feira",
       dateHint: "13/11",
       summary:
-        "Céu parcialmente nublado a nublado. Chuva fraca a moderada isolada a qualquer momento. Ventos moderado de SW/W.",
-      rainHint: "Chuva fraca a moderada isolada",
-      windHint: "Moderado de SW/W",
+        "Céu parcialmente nublado a nublado. Pancadas de chuva isoladas. Ventos fraco a moderado.",
+      rainHint: "Pancadas de chuva isoladas",
+      windHint: "Fraco a Moderado de SW/W",
       minTempC: 18,
-      maxTempC: 28,
+      maxTempC: 30,
       tempTrend: "estavel",
       iconUrl: null,
       skyHint: "Parcialmente Nublado a Nublado",

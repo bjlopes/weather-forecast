@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, X } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, Navigation, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type {
   ForecastBulletin,
   ForecastDay,
@@ -22,7 +23,7 @@ import {
   WeatherGlyph,
   type WeatherKind,
 } from "@/lib/alerta-rio/weather-icon";
-import type { UserLocation } from "@/hooks/use-user-location";
+import type { LocationStatus, UserLocation } from "@/hooks/use-user-location";
 import { cn } from "@/lib/utils";
 
 const emptySubscribe = () => () => {};
@@ -241,10 +242,16 @@ function enrichPeriodFromDays(
 export function ForecastTodayPanel({
   forecast,
   userLocation = null,
+  locationStatus = "idle",
+  locationError = null,
+  onRequestLocation,
   className,
 }: {
   forecast: ForecastBulletin | null;
   userLocation?: UserLocation | null;
+  locationStatus?: LocationStatus;
+  locationError?: string | null;
+  onRequestLocation?: () => void;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -270,6 +277,7 @@ export function ForecastTodayPanel({
   const minTempC = zoneTemp?.minTempC ?? forecast.minTempC;
   const maxTempC = zoneTemp?.maxTempC ?? forecast.maxTempC;
   const tempTrend = activePeriod?.tempTrend ?? forecast.tempTrend;
+  const locating = locationStatus === "loading";
 
   const title = polishProse(forecast.title);
   const synoptic = polishProse(forecast.synoptic);
@@ -324,8 +332,40 @@ export function ForecastTodayPanel({
         {zoneTemp && (
           <p className="mt-1 text-[12px] text-slate-500">
             {zoneTemp.zone}
-            {preferredZone ? "" : " · referência"}
+            {preferredZone ? " · pela sua localização" : " · referência"}
           </p>
+        )}
+        {onRequestLocation && (
+          <div className="mt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant={preferredZone ? "outline" : "default"}
+              onClick={onRequestLocation}
+              disabled={locating}
+              className={cn(
+                "h-10",
+                preferredZone
+                  ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700/50"
+                  : "border-0 bg-brand-500 text-slate-950 hover:bg-brand-400",
+              )}
+            >
+              <Navigation className={cn("size-4", locating && "animate-pulse")} />
+              {locating
+                ? "Localizando…"
+                : preferredZone
+                  ? "Atualizar localização"
+                  : "Usar minha localização"}
+            </Button>
+            {locationStatus === "error" && locationError ? (
+              <p className="mt-2 text-xs text-amber-400/90">{locationError}</p>
+            ) : null}
+            {!preferredZone && locationStatus === "idle" ? (
+              <p className="mt-2 text-[12px] text-slate-500">
+                Ajusta mín/máx de Hoje e das próximas 24h para a sua região.
+              </p>
+            ) : null}
+          </div>
         )}
 
         {activePeriod ? (
@@ -438,6 +478,7 @@ export function ForecastTodayPanel({
           <div className="mt-5 border-t border-slate-700/50 pt-4">
             <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
               Temperaturas por região
+              {preferredZone ? ` · sua zona: ${preferredZone}` : ""}
             </p>
             <ul className="mt-2 space-y-1.5">
               {forecast.zoneTemps.map((z) => (
@@ -448,7 +489,10 @@ export function ForecastTodayPanel({
                     zoneTemp?.zone === z.zone ? "text-brand-400" : "text-slate-300",
                   )}
                 >
-                  <span>{z.zone}</span>
+                  <span>
+                    {z.zone}
+                    {zoneTemp?.zone === z.zone ? " · você" : ""}
+                  </span>
                   <span className="tabular-nums">
                     {z.minTempC != null ? `${z.minTempC}°` : "—"}
                     {" / "}

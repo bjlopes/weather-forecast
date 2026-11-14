@@ -1,17 +1,34 @@
 import type { StationHealth } from "./types";
 
+export function stationAgeHours(
+  readAtIso: string | null | undefined,
+  now = Date.now(),
+): number | null {
+  if (!readAtIso) return null;
+  const t = Date.parse(readAtIso);
+  if (Number.isNaN(t)) return null;
+  return (now - t) / 3_600_000;
+}
+
+/** Estações sem leitura há 3+ dias ficam ocultas até voltarem a operar. */
+export function isStationStaleDays(
+  station: { readAtIso?: string | null },
+  days = 3,
+  now = Date.now(),
+): boolean {
+  const ageH = stationAgeHours(station.readAtIso, now);
+  if (ageH == null) return false;
+  return ageH >= days * 24;
+}
+
 export function classifyHealth(readAtIso: string | null | undefined, now = Date.now()): {
   health: StationHealth;
   healthLabel: string;
 } {
-  if (!readAtIso) {
+  const ageH = stationAgeHours(readAtIso, now);
+  if (ageH == null) {
     return { health: "desconhecida", healthLabel: "Sem leitura" };
   }
-  const t = Date.parse(readAtIso);
-  if (Number.isNaN(t)) {
-    return { health: "desconhecida", healthLabel: "Sem leitura" };
-  }
-  const ageH = (now - t) / 3_600_000;
   if (ageH <= 2) return { health: "ativa", healthLabel: "Ativa" };
   if (ageH <= 24) return { health: "atrasada", healthLabel: `Atrasada · ${Math.round(ageH)} h` };
   if (ageH <= 24 * 7) {

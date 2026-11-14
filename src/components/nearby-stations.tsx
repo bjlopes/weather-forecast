@@ -77,8 +77,8 @@ export function NearbyStationsPanel({
 
       {locationStatus === "idle" && (
         <p className="mt-4 text-sm text-slate-400">
-          Ative a localização para ver estações perto de você e ordenar a lista Estações por
-          distância.
+          Ative a localização para ver estações perto de você, ordenar Estações por distância e
+          ajustar mín/máx de Hoje e próximas 24h à sua região.
         </p>
       )}
 

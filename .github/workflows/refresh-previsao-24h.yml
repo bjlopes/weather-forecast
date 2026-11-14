@@ -22,29 +22,107 @@ jobs:
           UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           updated=false
 
-          fetch_one() {
+          usable() {
+            local f="$1"
+            [ -f "$f" ] || return 1
+            ! grep -qi 'Request Rejected' "$f" || return 1
+            [ "$(wc -c <"$f")" -gt 800 ] || return 1
+            return 0
+          }
+
+          # Converte tabelas markdown do Jina em HTML mínimo com <tr>/<td>.
+          md_to_html() {
+            python3 - "$1" "$2" <<'PY'
+          import re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          text = open(src, encoding="utf-8", errors="ignore").read()
+          if "Request Rejected" in text:
+              raise SystemExit(1)
+          lines = text.splitlines()
+          rows = []
+          for line in lines:
+              t = line.strip()
+              if not t.startswith("|") or t.count("|") < 2:
+                  continue
+              if re.match(r"^\|[\s|:.-]+\|$", t):
+                  continue
+              cells = [c.strip() for c in t.strip("|").split("|")]
+              if not cells:
+                  continue
+              rows.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
+          if len(rows) < 4:
+              raise SystemExit(1)
+          html = "<html><body><table border=\"1\">\n" + "\n".join(rows) + "\n</table></body></html>\n"
+          open(dst, "w", encoding="utf-8").write(html)
+          PY
+          }
+
+          fetch_direct() {
             local out="$1"; shift
             local pattern_ok="$1"; shift
-            local ok=0
             for url in "$@"; do
               code=$(curl -sS -L --max-time 25 -A "$UA" \
                 -H "Accept: text/html,application/xhtml+xml" \
                 -H "Accept-Language: pt-BR,pt;q=0.9" \
                 -H "Referer: https://alertario.rio.rj.gov.br/" \
                 -o /tmp/alerta-body.html -w '%{http_code}' "$url" || true)
-              if [ "$code" = "200" ] \
-                && ! grep -qi 'Request Rejected' /tmp/alerta-body.html \
-                && eval "$pattern_ok" \
-                && [ "$(wc -c </tmp/alerta-body.html)" -gt 800 ]
-              then
+              if [ "$code" = "200" ] && usable /tmp/alerta-body.html && eval "$pattern_ok"; then
                 cp /tmp/alerta-body.html "$out"
                 echo "Fetched $out from $url"
-                ok=1
-                break
+                return 0
               fi
-              echo "Skip $url (HTTP $code)"
+              echo "Skip direct $url (HTTP $code)"
             done
-            [ "$ok" = "1" ]
+            return 1
+          }
+
+          fetch_jina() {
+            local out="$1"
+            local url="$2"
+            local pattern_ok="$3"
+            for fmt in markdown html; do
+              code=$(curl -sS -L --max-time 35 -A "$UA" \
+                -H "Accept: text/markdown,text/plain,text/html,*/*" \
+                -H "X-Return-Format: $fmt" \
+                -H "X-Timeout: 25" \
+                -o /tmp/jina-body.txt -w '%{http_code}' \
+                "https://r.jina.ai/${url}?t=$(date +%s)" || true)
+              if [ "$code" != "200" ]; then
+                echo "Skip jina $fmt $url (HTTP $code)"
+                continue
+              fi
+              if [ "$fmt" = "markdown" ]; then
+                if md_to_html /tmp/jina-body.txt /tmp/alerta-body.html; then
+                  :
+                else
+                  echo "Skip jina markdown convert $url"
+                  continue
+                fi
+              else
+                cp /tmp/jina-body.txt /tmp/alerta-body.html
+              fi
+              if usable /tmp/alerta-body.html && eval "$pattern_ok"; then
+                cp /tmp/alerta-body.html "$out"
+                echo "Fetched $out via jina $fmt from $url"
+                return 0
+              fi
+              echo "Skip jina $fmt $url (unusable)"
+            done
+            return 1
+          }
+
+          fetch_one() {
+            local out="$1"; shift
+            local pattern_ok="$1"; shift
+            if fetch_direct "$out" "$pattern_ok" "$@"; then
+              return 0
+            fi
+            for url in "$@"; do
+              if fetch_jina "$out" "$url" "$pattern_ok"; then
+                return 0
+              fi
+            done
+            return 1
           }
 
           if fetch_one \

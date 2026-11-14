@@ -6,8 +6,11 @@ import type {
   TempTrend,
 } from "./forecast-types";
 import {
+  currentDayPeriod,
   DAY_PERIOD_LABEL,
+  nextThreePeriodSlots,
   pickActivePeriod,
+  rioDayKey,
   type DayPeriodName,
 } from "./forecast-zone";
 import { readFile } from "node:fs/promises";
@@ -413,9 +416,49 @@ export function bulletinFromPrevisao24h(day: Previsao24hParsed): ForecastBulleti
   });
 }
 
+/**
+ * Quando o 24h falha, sintetiza 4 períodos (atual + 3 seguintes) com o
+ * céu/chuva/vento do dia da Estendida — mantém a UI de Hoje/Próximas 24h.
+ */
+function periodsFromEstendidaDay(day: AlertaRioDayForecast): ForecastPeriod[] {
+  // Ancora no relógio (hoje), mesmo se a Estendida só trouxer dias futuros.
+  const today = rioDayKey();
+  const activeName = currentDayPeriod();
+  const slots = [
+    {
+      name: activeName,
+      label: DAY_PERIOD_LABEL[activeName],
+      date: today,
+      dateHint: dateHintFromIso(today),
+    },
+    ...nextThreePeriodSlots(activeName, today),
+  ];
+  return slots.map((slot) => ({
+    name: slot.name,
+    label: slot.label,
+    date: slot.date,
+    dateHint: slot.dateHint,
+    sky: day.sky,
+    precip: day.precip,
+    wind: day.wind,
+    tempTrend: day.tempTrend,
+    tempTrendLabel: day.tempTrendLabel,
+  }));
+}
+
 /** Fallback: usa o dia de hoje (ou o mais próximo) da Estendida. */
 export function bulletinFromEstendidaDay(day: AlertaRioDayForecast): ForecastBulletin {
-  return bulletinFromAlertaDay(day, { sourceUrl: PREVISAO_ESTENDIDA_PAGE });
+  return bulletinFromAlertaDay(day, {
+    sourceUrl: PREVISAO_ESTENDIDA_PAGE,
+    periods: periodsFromEstendidaDay(day),
+    zoneTemps: [
+      {
+        zone: "Rio de Janeiro",
+        minTempC: day.minTempC,
+        maxTempC: day.maxTempC,
+      },
+    ],
+  });
 }
 
 /** Cache commitado no repo — atualizado pelo workflow quando o WAF libera o HTML. */

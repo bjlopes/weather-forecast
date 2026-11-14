@@ -153,16 +153,26 @@ async function jinaFetchAlertaHtml(
   }
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Node direto → curl → proxy Jina (HTML, depois markdown).
- * TempoReal costuma passar no Node; Estendida/Previsão oscilam e caem no Jina.
+ * Repete 1–2 vezes: o WAF municipal oscila e às vezes libera na 2ª tentativa.
  */
 export async function fetchAlertaHtml(url: string): Promise<string | null> {
-  const viaNode = await nodeFetchAlertaHtml(url);
-  if (viaNode) return viaNode;
-  const viaCurl = await curlAlertaHtml(url);
-  if (viaCurl) return viaCurl;
-  const viaJinaHtml = await jinaFetchAlertaHtml(url, "html");
-  if (viaJinaHtml) return viaJinaHtml;
-  return jinaFetchAlertaHtml(url, "markdown");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(400 * attempt);
+
+    const viaNode = await nodeFetchAlertaHtml(url);
+    if (viaNode) return viaNode;
+    const viaCurl = await curlAlertaHtml(url);
+    if (viaCurl) return viaCurl;
+    const viaJinaHtml = await jinaFetchAlertaHtml(url, "html");
+    if (viaJinaHtml) return viaJinaHtml;
+    const viaJinaMd = await jinaFetchAlertaHtml(url, "markdown");
+    if (viaJinaMd) return viaJinaMd;
+  }
+  return null;
 }

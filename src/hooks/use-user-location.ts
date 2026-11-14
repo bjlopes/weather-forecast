@@ -41,7 +41,7 @@ export function useUserLocation() {
         setError(message);
         setLocation(null);
       },
-      { enableHighAccuracy: false, timeout: 12000, maximumAge: 60_000 },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
     );
   }, []);
 

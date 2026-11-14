@@ -15,6 +15,7 @@ import { useUserLocation } from "@/hooks/use-user-location";
 import type { ForecastBulletin } from "@/lib/alerta-rio/forecast-types";
 import { distanceKm, formatDistanceKm } from "@/lib/alerta-rio/station-coords";
 import type { AlertaRioSnapshot } from "@/lib/alerta-rio/types";
+import { isStationStaleDays } from "@/lib/stations/health";
 import type { StationHealth, StationNetwork, StationsSnapshot, UnifiedStation } from "@/lib/stations/types";
 import { cn } from "@/lib/utils";
 
@@ -155,11 +156,16 @@ export function AlertaRioDashboard() {
     return () => observer.disconnect();
   }, [forecast, data, stationsSnap]);
 
+  const activeStations = useMemo(() => {
+    if (!stationsSnap) return [] as UnifiedStation[];
+    // Oculta estações paradas há 3+ dias até voltarem a publicar leitura.
+    return stationsSnap.stations.filter((s) => !isStationStaleDays(s, 3));
+  }, [stationsSnap]);
+
   const filtered = useMemo(() => {
-    if (!stationsSnap) return [] as Array<UnifiedStation & { distanceKm: number | null }>;
     const q = query.trim().toLowerCase();
     const healthRank = { ativa: 0, atrasada: 1, desconhecida: 2, parada: 3 } as const;
-    return stationsSnap.stations
+    return activeStations
       .filter((s) => (network === "Todas" ? true : s.network === network))
       .filter((s) =>
         !q
@@ -186,7 +192,7 @@ export function AlertaRioDashboard() {
         if (hr !== 0) return hr;
         return (b.rainMmH24 ?? -1) - (a.rainMmH24 ?? -1);
       });
-  }, [stationsSnap, query, network, userLocation]);
+  }, [activeStations, query, network, userLocation]);
 
   const selected = stationsSnap?.stations.find((s) => s.id === selectedId) ?? null;
 
@@ -277,11 +283,17 @@ export function AlertaRioDashboard() {
           </div>
         </nav>
 
-        <ForecastTodayPanel forecast={forecast} userLocation={userLocation} />
+        <ForecastTodayPanel
+          forecast={forecast}
+          userLocation={userLocation}
+          locationStatus={locationStatus}
+          locationError={locationError}
+          onRequestLocation={requestLocation}
+        />
         <ForecastDaysPanel forecast={forecast} />
         <RadarPanel refreshToken={radarRefreshToken} />
         <NearbyStationsPanel
-          stations={stationsSnap?.stations ?? null}
+          stations={activeStations}
           onOpenStation={openStation}
           location={userLocation}
           locationStatus={locationStatus}
@@ -296,8 +308,8 @@ export function AlertaRioDashboard() {
               <p className="mt-1 text-[13px] text-slate-400 sm:text-sm">
                 {stationsSnap
                   ? userLocation
-                    ? `${stationsSnap.counts.total} redes · ordenadas por proximidade`
-                    : `${stationsSnap.counts.total} redes unificadas · toque para detalhe`
+                    ? `${filtered.length} ativas · ordenadas por proximidade`
+                    : `${filtered.length} ativas · sem leitura há 3+ dias ocultas`
                   : "Alerta Rio · INMET · CEMADEN · aeroportos"}
               </p>
             </div>
